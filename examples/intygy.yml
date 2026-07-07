@@ -1,0 +1,14 @@
+# Copy to the ROOT of the repo you want to protect
+target: preview          # uses your Vercel/Netlify preview deployment
+# target:                # …or serve the app inside CI instead:
+#   serve: "npm run build && npm run start"
+#   url: "http://localhost:3000"
+
+routes:
+  - /
+  - /products
+  - /checkout
+
+ruleset: wcag22-aa
+viewports: [desktop, mobile]
+baseline: auto

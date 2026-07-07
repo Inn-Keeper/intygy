@@ -1,0 +1,16 @@
+# Copy to .github/workflows/intygy.yml in the repo you want to protect
+name: Accessibility check
+on: pull_request
+
+jobs:
+  a11y:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      # While the action is unpublished, reference it directly from your Intygy repo:
+      - uses: YOUR_GITHUB_USER/intygy/packages/action@main
+        with:
+          api-key: ${{ secrets.INTYGY_KEY }}
+          api-base: https://YOUR_DEPLOYED_API_URL
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}   # needed for target: preview
