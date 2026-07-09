@@ -11,4 +11,4 @@ routes:
 
 ruleset: wcag22-aa
 viewports: [desktop, mobile]
-baseline: auto
+# Baseline is always server-side: first scan establishes it; PRs block only new violations.

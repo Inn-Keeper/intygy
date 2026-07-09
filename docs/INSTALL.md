@@ -73,7 +73,8 @@ In the repo you're protecting:
 
 1. Settings → Secrets → Actions → new secret `INTYGY_KEY` = the api_key from Step 4.
 2. Copy `examples/intygy-workflow.yml` → `.github/workflows/intygy.yml`, replacing
-   `YOUR_GITHUB_USER/intygy` and `YOUR_DEPLOYED_API_URL`.
+   `YOUR_GITHUB_USER/intygy` and `YOUR_DEPLOYED_API_URL`. The workflow runs on **pull requests**
+   (gate new violations) and **pushes to `main`** (update baseline, mark resolved issues).
 3. Copy `examples/intygy.yml` → repo root; set real routes. No Vercel/Netlify previews?
    Use the `serve:` variant.
 
@@ -85,7 +86,9 @@ In the repo you're protecting:
    to a focusable button, or set a text color to low contrast.
 3. The check goes **red**, and the Intygy bot comments on the PR with the rule,
    the WCAG criterion, the selector, and a fix link.
-4. Fix it, push, check goes green. Merge → visit `/p/<project-id>/evidence` for the dossier.
+4. Fix it, push, check goes green. Merge to `main` → the **push** workflow runs and records
+   any resolved issues. Visit `/p/<project-id>/evidence` — the dossier should show updated
+   resolution counts.
 
 ## Troubleshooting
 
@@ -96,3 +99,9 @@ In the repo you're protecting:
 - **Webhook 401** — `GITHUB_WEBHOOK_SECRET` mismatch between App settings and env.
 - **Playwright install slow in CI** — first run downloads Chromium (~1 min);
   add `actions/cache` on `~/.cache/ms-playwright` keyed to the playwright version.
+- **Push workflow fails but PR scans work** — `target: preview` needs a deployment for the
+  `main` commit. Use `serve:` or a fixed `url:` if your host doesn't deploy on push.
+- **Evidence shows no resolved issues after merge** — confirm the workflow includes
+  `push: branches: [main]` and that a push scan completed successfully.
+
+See [ARCHITECTURE.md](./ARCHITECTURE.md) for component diagram, auth model, and local curl testing.

@@ -1,6 +1,9 @@
 # Copy to .github/workflows/intygy.yml in the repo you want to protect
 name: Accessibility check
-on: pull_request
+on:
+  pull_request:
+  push:
+    branches: [main]   # post-merge scan: updates baseline + marks resolved issues
 
 jobs:
   a11y:
@@ -13,4 +16,6 @@ jobs:
           api-key: ${{ secrets.INTYGY_KEY }}
           api-base: https://YOUR_DEPLOYED_API_URL
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}   # needed for target: preview
+          # Customer repo token — used by the Action to find Vercel/Netlify preview URLs.
+          # The Intygy GitHub App (operator-hosted) posts PR comments separately.
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

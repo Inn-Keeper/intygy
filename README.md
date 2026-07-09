@@ -11,14 +11,15 @@ packages/api      Hono (Node) API: ingest, baseline diffing, PR comments, dashbo
 packages/shared   Payload types shared by both
 db/schema.sql     Postgres schema
 examples/         Workflow + intygy.yml templates for customer repos
-docs/INSTALL.md   Step-by-step: run this on YOUR GitHub today
+docs/INSTALL.md      Step-by-step: run this on YOUR GitHub today
+docs/ARCHITECTURE.md Components, auth, scan lifecycle, testing
 ```
 
 ## How it fits together
 
-1. Customer repo runs the **Action** on every PR (their CI minutes). It resolves a rendered
-   app (preview URL or `serve` command), scans configured routes with axe-core, and POSTs
-   results to the API with the project's key.
+1. Customer repo runs the **Action** on every PR and every push to `main` (their CI minutes).
+   It resolves a rendered app (preview URL or `serve` command), scans configured routes with
+   axe-core, and POSTs results to the API with the project's key.
 2. The **API** fingerprints each violation (`rule|route|viewport|selector`), diffs against the
    project **baseline**, comments on the PR via the GitHub App when new violations appear,
    and returns `blocked: true` so the Action fails the check.
