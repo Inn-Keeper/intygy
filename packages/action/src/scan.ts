@@ -1,10 +1,8 @@
-import { readFileSync } from "node:fs";
 import * as core from "@actions/core";
-import { chromium, type Browser, type BrowserContext } from "playwright";
+import type { Browser, BrowserContext } from "playwright";
 import type { IntygyConfig } from "./config";
 import type { Violation, ViewportName } from "../../shared/types";
 
-const axeSource = readFileSync(require.resolve("axe-core/axe.min.js"), "utf8");
 
 const RULESET_TAGS: Record<IntygyConfig["ruleset"], string[]> = {
   "wcag22-aa": ["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa", "best-practice"],
@@ -38,6 +36,9 @@ async function login(context: BrowserContext, baseUrl: string, auth: NonNullable
 }
 
 export async function runScan(config: IntygyConfig, baseUrl: string): Promise<Violation[]> {
+  // Loaded lazily: playwright is external to the bundle and installed at runtime by ensureBrowser().
+  const { chromium } = await import("playwright");
+  const { source: axeSource } = await import("axe-core");
   const browser: Browser = await chromium.launch({ headless: true });
   const violations: Violation[] = [];
   try {
