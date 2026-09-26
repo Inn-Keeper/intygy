@@ -4,17 +4,18 @@ Time: ~45 minutes. You'll need: a GitHub account, a Postgres database, and somew
 a small Node server (Railway, Fly.io, Render, a Hetzner box — or locally with a webhook proxy
 for testing).
 
-## Step 0 — Push this code
+## Step 0 — Release the Action
 
-Create a repo (e.g. `dalton/intygy`), push this codebase, then build and commit the Action bundle:
+Customer repos use the Action as `Inn-Keeper/intygy@v1`. After changing `packages/action/src`:
 
 ```bash
-pnpm install
 pnpm build:action
-git add packages/action/dist -f && git commit -m "build action" && git push
+git add packages/action/dist && git commit -m "Build action" && git push
 ```
 
-(The `dist/` bundle must be committed for `uses: dalton/intygy/packages/action@main` to work.)
+CI fails if the committed `dist/` is stale. Then publish a GitHub Release tagged `vX.Y.Z`;
+the release workflow moves the `vX` tag to it. Tick **Publish this Action to the GitHub
+Marketplace** on the release form to list it.
 
 ## Step 1 — Database (5 min)
 
@@ -73,7 +74,7 @@ In the repo you're protecting:
 
 1. Settings → Secrets → Actions → new secret `INTYGY_KEY` = the api_key from Step 4.
 2. Copy `examples/intygy-workflow.yml` → `.github/workflows/intygy.yml`, replacing
-   `YOUR_GITHUB_USER/intygy` and `YOUR_DEPLOYED_API_URL`. The workflow runs on **pull requests**
+   `YOUR_DEPLOYED_API_URL`. The workflow runs on **pull requests**
    (gate new violations) and **pushes to `main`** (update baseline, mark resolved issues).
 3. Copy `examples/intygy.yml` → repo root; set real routes. No Vercel/Netlify previews?
    Use the `serve:` variant.

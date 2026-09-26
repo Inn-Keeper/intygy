@@ -32,7 +32,7 @@ docs/ARCHITECTURE.md Components, auth, scan lifecycle, testing
 ```bash
 pnpm install                # workspace deps (set PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 locally)
 pnpm typecheck              # both packages
-pnpm build:action           # bundles packages/action/dist (commit dist to use via uses:)
+pnpm build:action           # bundles packages/action/dist (commit it; CI fails if stale)
 pnpm dev:api                # local API on :3000 (needs DATABASE_URL)
 ```
 

@@ -95,7 +95,7 @@ Evidence page → shows resolution history from baselines.resolved_at
 1. Deploy `packages/api` (Railway, Fly, Render, etc.)
 2. Run `db/schema.sql` against Postgres
 3. Register GitHub App pointing webhook at `/api/github/webhook`
-4. Build and commit `packages/action/dist` (or publish to Marketplace)
+4. Build and commit `packages/action/dist`, then publish a GitHub Release `vX.Y.Z` (moves the `vX` tag; tick "Publish to Marketplace")
 
 **Customer** (per protected repo):
 
@@ -132,7 +132,7 @@ Covers fingerprint stability, payload validation, and comment label parsing.
 
 ```bash
 pnpm build:action
-ls packages/action/dist/index.js   # must exist before uses: .../packages/action@main works
+ls packages/action/dist/index.js   # must be committed: `uses: Inn-Keeper/intygy@v1` runs it
 ```
 
 ### 3. Local API + simulated scans

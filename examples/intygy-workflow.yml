@@ -10,8 +10,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      # While the action is unpublished, reference it directly from your Intygy repo:
-      - uses: YOUR_GITHUB_USER/intygy/packages/action@main
+      - uses: Inn-Keeper/intygy@v1
         with:
           api-key: ${{ secrets.INTYGY_KEY }}
           api-base: https://YOUR_DEPLOYED_API_URL

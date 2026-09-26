@@ -8,9 +8,8 @@ inputs:
     description: "Your Intygy project API key (store as a repo secret)."
     required: true
   api-base:
-    description: "Intygy API base URL."
-    required: false
-    default: "https://api.intygy.eu"
+    description: "Intygy API base URL, e.g. https://intygy.example.com."
+    required: true
   config-path:
     description: "Path to intygy.yml in the repository."
     required: false

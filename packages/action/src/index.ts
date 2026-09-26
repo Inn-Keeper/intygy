@@ -8,7 +8,7 @@ import type { ScanPayload } from "../../shared/types";
 
 async function main(): Promise<void> {
   const apiKey = core.getInput("api-key", { required: true });
-  const apiBase = core.getInput("api-base") || "https://api.intygy.eu";
+  const apiBase = core.getInput("api-base", { required: true });
   const configPath = core.getInput("config-path") || "intygy.yml";
 
   const config = loadConfig(configPath);
