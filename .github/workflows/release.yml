@@ -1,0 +1,19 @@
+# Publish a GitHub Release tagged vX.Y.Z → this moves the vX tag to it,
+# so users pinned to `Inn-Keeper/intygy@v1` get fixes without breaking changes.
+name: Release
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: write
+
+jobs:
+  move-major-tag:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          major="${GITHUB_REF_NAME%%.*}"
+          git tag -f "$major" "$GITHUB_REF_NAME"
+          git push -f origin "$major"

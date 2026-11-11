@@ -21,11 +21,16 @@ const AuthSchema = z.object({
   user_field: z.string().default("input[type=email], input[name=email], input[name=username]"),
   pass_field: z.string().default("input[type=password]"),
   submit: z.string().default("button[type=submit]"),
+  success_selector: z.string().min(1),
 });
 
 export const ConfigSchema = z.object({
   target: TargetSchema.default("preview"),
-  routes: z.array(z.string().startsWith("/")).min(1),
+  routes: z.array(z.string().startsWith("/").refine(
+    (route) => !route.startsWith("//") && !/[\\\u0000-\u0020]/.test(route), "route must stay on the target origin; encode spaces"
+  )).min(1),
+  readySelector: z.string().min(1),
+  readyTimeoutMs: z.number().int().positive().max(120_000).default(15_000),
   ruleset: z.enum(["wcag22-aa", "wcag21-aa"]).default("wcag22-aa"),
   viewports: z.array(z.enum(["desktop", "mobile"])).min(1).default(["desktop"]),
   auth: AuthSchema.optional(),

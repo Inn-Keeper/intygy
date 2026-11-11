@@ -2,6 +2,9 @@ import { spawn, execSync } from "node:child_process";
 import * as core from "@actions/core";
 import * as github from "@actions/github";
 import type { IntygyConfig } from "./config";
+/** Runtime-installed deps; must equal the installed versions (test/target.test.ts enforces it). */
+export const PLAYWRIGHT_VERSION = "1.61.1";
+export const AXE_CORE_VERSION = "4.12.1";
 
 /** Poll a URL until it responds (any status < 500 counts as up). */
 async function waitForUrl(url: string, timeoutMs: number): Promise<void> {
@@ -92,6 +95,12 @@ export async function resolveTarget(config: IntygyConfig, sha: string): Promise<
 /** Ensure a Chromium build exists on the runner (cached by GitHub between runs of the same workflow). */
 export function ensureBrowser(): void {
   if (process.env.INTYGY_SKIP_BROWSER_INSTALL === "1") return;
-  core.info("Ensuring Chromium is installed for Playwright…");
-  execSync("npx playwright install --with-deps chromium", { stdio: "inherit" });
+  core.info(`Installing Playwright ${PLAYWRIGHT_VERSION}, axe-core ${AXE_CORE_VERSION} + Chromium…`);
+  // Neither survives bundling (playwright reads its own files from disk; axe-core's `source` is its
+  // own minified function text), so both are installed next to dist/index.js, where Node resolves them.
+  execSync(
+    `npm install --no-save --no-package-lock --prefix "${__dirname}" playwright@${PLAYWRIGHT_VERSION} axe-core@${AXE_CORE_VERSION}`,
+    { stdio: "inherit" }
+  );
+  execSync("npx playwright install --with-deps chromium", { cwd: __dirname, stdio: "inherit" });
 }

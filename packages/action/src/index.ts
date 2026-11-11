@@ -1,5 +1,6 @@
 import * as core from "@actions/core";
 import * as github from "@actions/github";
+import { randomUUID } from "node:crypto";
 import { loadConfig } from "./config";
 import { ensureBrowser, resolveTarget } from "./target";
 import { runScan } from "./scan";
@@ -8,7 +9,7 @@ import type { ScanPayload } from "../../shared/types";
 
 async function main(): Promise<void> {
   const apiKey = core.getInput("api-key", { required: true });
-  const apiBase = core.getInput("api-base") || "https://api.intygy.eu";
+  const apiBase = core.getInput("api-base", { required: true });
   const configPath = core.getInput("config-path") || "intygy.yml";
 
   const config = loadConfig(configPath);
@@ -23,12 +24,15 @@ async function main(): Promise<void> {
   try {
     const violations = await runScan(config, target.baseUrl);
     const payload: ScanPayload = {
+      version: 2,
+      submissionId: randomUUID(),
       repo: `${ctx.repo.owner}/${ctx.repo.repo}`,
       sha,
       branch,
       prNumber,
       ruleset: config.ruleset,
       routesScanned: config.routes,
+      viewports: config.viewports,
       startedAt,
       finishedAt: new Date().toISOString(),
       violations,
@@ -42,6 +46,8 @@ async function main(): Promise<void> {
           `[Dashboard](${result.dashboardUrl})`
       );
     await core.summary.write();
+
+    if (result.notice) core.warning(result.notice);
 
     if (result.blocked) {
       core.setFailed(

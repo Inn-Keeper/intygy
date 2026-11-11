@@ -1,5 +1,5 @@
 name: "Intygy Accessibility Check"
-description: "Scans the routes your PR affects with axe-core + Playwright and reports results to Intygy. Fails on new WCAG violations."
+description: "Scans configured routes with axe-core + Playwright and reports every failing element to Intygy. Fails on new PR findings."
 branding:
   icon: "check-circle"
   color: "green"
@@ -8,13 +8,12 @@ inputs:
     description: "Your Intygy project API key (store as a repo secret)."
     required: true
   api-base:
-    description: "Intygy API base URL."
-    required: false
-    default: "https://api.intygy.eu"
+    description: "Intygy API base URL, e.g. https://intygy.example.com."
+    required: true
   config-path:
     description: "Path to intygy.yml in the repository."
     required: false
     default: "intygy.yml"
 runs:
   using: "node24"
-  main: "dist/index.js"
+  main: "packages/action/dist/index.js"

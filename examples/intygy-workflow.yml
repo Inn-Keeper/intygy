@@ -5,13 +5,20 @@ on:
   push:
     branches: [main]   # post-merge scan: updates baseline + marks resolved issues
 
+permissions:
+  contents: read
+  deployments: read
+
 jobs:
   a11y:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      # While the action is unpublished, reference it directly from your Intygy repo:
-      - uses: YOUR_GITHUB_USER/intygy/packages/action@main
+        with:
+          # Local serve builds must match the SHA recorded by the Action.
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      # For a local serve target, install your application's dependencies here.
+      - uses: Inn-Keeper/intygy@v1
         with:
           api-key: ${{ secrets.INTYGY_KEY }}
           api-base: https://YOUR_DEPLOYED_API_URL

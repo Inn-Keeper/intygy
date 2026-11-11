@@ -9,6 +9,12 @@ routes:
   - /products
   - /checkout
 
+# Choose an application-specific marker that is visible only after each page loads.
+readySelector: "main"
+readyTimeoutMs: 15000
+# When configuring auth, also set auth.success_selector to an authenticated marker
+# visible after login and on every scanned page (for example a sign-out button).
+
 ruleset: wcag22-aa
 viewports: [desktop, mobile]
 # Baseline is always server-side: first scan establishes it; PRs block only new violations.

@@ -4,30 +4,40 @@ Time: ~45 minutes. You'll need: a GitHub account, a Postgres database, and somew
 a small Node server (Railway, Fly.io, Render, a Hetzner box — or locally with a webhook proxy
 for testing).
 
-## Step 0 — Push this code
+## Step 0 — Release the Action
 
-Create a repo (e.g. `dalton/intygy`), push this codebase, then build and commit the Action bundle:
+Customer repos use the Action as `Inn-Keeper/intygy@v1`. After changing `packages/action/src`:
 
 ```bash
-pnpm install
 pnpm build:action
-git add packages/action/dist -f && git commit -m "build action" && git push
+git add packages/action/dist && git commit -m "Build action" && git push
 ```
 
-(The `dist/` bundle must be committed for `uses: dalton/intygy/packages/action@main` to work.)
+CI fails if the committed `dist/` is stale. Then publish a GitHub Release tagged `vX.Y.Z`;
+the release workflow moves the `vX` tag to it. Tick **Publish this Action to the GitHub
+Marketplace** on the release form to list it.
 
 ## Step 1 — Database (5 min)
 
-Create a Postgres instance — Supabase (choose an EU region) free tier is fine.
-Run `db/schema.sql` against it (Supabase: SQL Editor → paste → run).
-Copy the connection string.
+Create a Postgres instance — a Neon project (choose an EU region near the API host) free
+tier is fine. Run `db/schema.sql` against it (Neon: SQL Editor → paste → run, or `psql`
+with the **direct** connection string). Copy the **pooled** connection string (host contains
+`-pooler`, ends with `?sslmode=require`) for the API; keep the direct one for schema changes
+and dump/restore.
+
+Neon suspends idle compute by default. The first request after inactivity waits for it to
+wake, typically a few hundred milliseconds to a few seconds; disable scale-to-zero in the Neon project
+if that matters. Free Render web services also sleep when idle, which adds a much longer
+cold start to the first webhook or scan.
 
 ## Step 2 — Deploy the API (10 min)
 
 Deploy `packages/api` to any Node host. Railway/Render: point at the repo,
 start command `pnpm --filter @intygy/api start`, root install command `pnpm install`.
+The start command uses `tsx`, so do not omit development dependencies from this MVP deployment.
 
-**For local testing instead:** run `DATABASE_URL=... pnpm dev:api` and start a webhook
+**For local testing instead:** copy `packages/api/.env.example` to `packages/api/.env`, fill in
+at least `DATABASE_URL` and `GITHUB_WEBHOOK_SECRET`, then run `pnpm dev:api`. Start a webhook
 proxy with [smee.io](https://smee.io) — create a channel, then
 `npx smee-client --url https://smee.io/YOUR_CHANNEL --target http://localhost:3000/api/github/webhook`.
 
@@ -47,13 +57,29 @@ GitHub → Settings → **Developer settings** → **GitHub Apps** → **New Git
 | Homepage URL | your API URL (anything works) |
 | Webhook URL | `https://YOUR_API/api/github/webhook` (or the smee.io channel URL) |
 | Webhook secret | invent one; same value as `GITHUB_WEBHOOK_SECRET` |
-| Permissions | **Issues: Read & write** (PR comments), **Pull requests: Read-only**, **Metadata: Read-only** |
+| Permissions | **Issues: Read & write** (PR comments), **Contents: Read-only** (verify branch head), **Pull requests: Read-only**, **Metadata: Read-only** |
 | Subscribe to events | *(none needed beyond the default installation events)* |
 | Where can it be installed | Only on this account (fine for now) |
 
 After creating: note the **App ID**, then **Generate a private key** (downloads a `.pem`).
 Convert it for the env var: `base64 -w0 your-key.pem` → `GITHUB_APP_PRIVATE_KEY_B64`.
 Restart/redeploy the API with all env vars set.
+
+Check that the process is serving requests:
+
+```bash
+curl -i http://localhost:3000/healthz
+```
+
+`/healthz` checks the API process only. To confirm Postgres is reachable, send an unknown API key;
+a connected database returns `401 unknown api key`, while a connection problem returns `500`:
+
+```bash
+curl -i -X POST http://localhost:3000/api/ingest \
+  -H 'Authorization: Bearer invalid' \
+  -H 'Content-Type: application/json' \
+  -d '{}'
+```
 
 ## Step 4 — Install the App on a target repo (2 min)
 
@@ -65,7 +91,7 @@ API creates a project row. Get its API key:
 select repo, api_key, id from projects;
 ```
 
-(Supabase SQL editor. Yes, manual for now — the onboarding UI is the first post-MVP task.)
+(Neon SQL Editor. Yes, manual for now — the onboarding UI is the first post-MVP task.)
 
 ## Step 5 — Wire up the target repo (5 min)
 
@@ -73,27 +99,36 @@ In the repo you're protecting:
 
 1. Settings → Secrets → Actions → new secret `INTYGY_KEY` = the api_key from Step 4.
 2. Copy `examples/intygy-workflow.yml` → `.github/workflows/intygy.yml`, replacing
-   `YOUR_GITHUB_USER/intygy` and `YOUR_DEPLOYED_API_URL`. The workflow runs on **pull requests**
+   `YOUR_DEPLOYED_API_URL`. The workflow runs on **pull requests**
    (gate new violations) and **pushes to `main`** (update baseline, mark resolved issues).
 3. Copy `examples/intygy.yml` → repo root; set real routes. No Vercel/Netlify previews?
-   Use the `serve:` variant.
+   Use the `serve:` variant and add your app's dependency-install/build prerequisites to the workflow.
+4. Set `readySelector` to an element visible only when the app is ready on each route.
+   Authenticated scans also require `auth.success_selector` after login and on each route.
+5. Replace the workflow's `main` filter with your actual default branch. The API discovers
+   it independently through the GitHub App; the workflow still controls when jobs run.
 
 ## Step 6 — See it work (5 min)
 
 1. Open any PR → the check runs → **baseline established**, check is green,
    dashboard link in the job summary shows your existing issue count.
-2. Now break something on purpose in a new PR — e.g. add `style={{outline:'none'}}`
-   to a focusable button, or set a text color to low contrast.
+2. Now break something on purpose in a new PR — e.g. add a visible button with no text or accessible name.
+   Removing a focus outline alone is not a reliable axe regression test.
 3. The check goes **red**, and the Intygy bot comments on the PR with the rule,
    the WCAG criterion, the selector, and a fix link.
 4. Fix it, push, check goes green. Merge to `main` → the **push** workflow runs and records
-   any resolved issues. Visit `/p/<project-id>/evidence` — the dossier should show updated
+   resolved issues within the scanned coverage. Visit `/p/<project-id>/evidence` — the dossier should show updated
    resolution counts.
 
 ## Troubleshooting
 
 - **"No successful preview deployment found"** — the repo has no Vercel/Netlify preview;
   switch `intygy.yml` to the `serve:` target.
+- **Invalid scan payload / upgrade error** — deploy the new Action and API together after migration.
+- **Missing readiness / authentication selector** — configure application-specific visible markers; do not use a loading shell or login page as proof of readiness.
+- **Unexpected redirect** — use the canonical route. A trailing slash is allowed; login redirects and other destinations fail the scan.
+- **Inactive installation or repository** — restore App access. Re-adding a removed repo rotates its key; retrieve and replace `INTYGY_KEY`.
+- **Stale default-branch scan** — the commit is no longer the branch head. Results remain in history without changing the baseline; scan the current head.
 - **No PR comment despite red check** — check API logs; usually the App lacks
   Issues write permission or `installation_id` is null (reinstall the App).
 - **Webhook 401** — `GITHUB_WEBHOOK_SECRET` mismatch between App settings and env.
@@ -105,3 +140,33 @@ In the repo you're protecting:
   `push: branches: [main]` and that a push scan completed successfully.
 
 See [ARCHITECTURE.md](./ARCHITECTURE.md) for component diagram, auth model, and local curl testing.
+
+## Upgrade an existing database and Action
+
+1. Back up the database and stop the API to avoid writes during fingerprint migration.
+2. Apply `db/migrations/001-flow-integrity.sql` against that database. It is transactional
+   and safe to rerun. Fresh databases continue to use `db/schema.sql` instead.
+3. Deploy the new API, grant the App Contents read permission, and publish the rebuilt
+   Action under a new release. Update customer workflows to that release together with
+   `readySelector` (and `auth.success_selector` when using login). Do not mix old Actions
+   with the version 2 API: they fail explicitly instead of changing baseline state.
+4. Retrieve rotated keys for repositories that were removed and re-added. Keys for
+   continuously active installations are preserved.
+5. Run a current default-branch scan and inspect the linked report and evidence coverage.
+
+The migration maps each old fingerprint to its latest recorded first selector and keeps
+its first-seen and last-resolution dates. The original fingerprint is retained in
+`legacy_fingerprint`; old violation rows are unchanged. Additional nodes that the old
+scanner discarded cannot be grandfathered safely and may now block PRs. Structured
+iframe/shadow selectors and changed exact selectors can also appear as new findings.
+Unmappable legacy baseline rows remain unchanged and are shown outside verified coverage.
+Do not delete those rows or silently accept current findings just to get a green check.
+
+Older resolution/reopening cycles were overwritten by the old schema and cannot be
+reconstructed. Evidence labels the imported snapshot; all future cycles are retained.
+Restoring the database backup and previous API/Action is the rollback path; do not run
+old ingestion code against migrated fingerprints. No deployment or migration is run by
+the repository's test/build commands.
+
+For SQL tests against a disposable Postgres instance, set `INTYGY_TEST_DATABASE_URL` and
+run `pnpm test`. See `ARCHITECTURE.md` for embedded versus multi-connection test scope.
