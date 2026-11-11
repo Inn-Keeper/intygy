@@ -47,6 +47,16 @@ test("missing projects have no evidence dossier", async (t) => {
   assert.equal((await app.request("/p/00000000-0000-4000-8000-000000000099/evidence")).status, 404);
 });
 
+test("dashboard pages keep their URLs out of referrers, indexes and shared caches", async (t) => {
+  const { app } = await setup(t);
+  const response = await app.request(`/p/${projectId}/evidence`);
+
+  assert.equal(response.status, 200);
+  assert.equal(response.headers.get("referrer-policy"), "no-referrer");
+  assert.equal(response.headers.get("x-robots-tag"), "noindex");
+  assert.equal(response.headers.get("cache-control"), "private, no-store");
+});
+
 test("malformed project or scan ids are not found rather than server errors", async (t) => {
   const { app } = await setup(t);
 

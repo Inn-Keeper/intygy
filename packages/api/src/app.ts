@@ -98,6 +98,12 @@ export function createApp(deps: {
   /* ------------------------------------------------------------------ */
   // Postgres rejects non-UUID ids with an error; answer 404 before querying.
   app.use("/p/*", async (c, next) => {
+    // The UUID in the URL is the only access control: keep it out of referrers,
+    // search indexes, and shared caches.
+    c.header("Referrer-Policy", "no-referrer");
+    c.header("X-Robots-Tag", "noindex");
+    c.header("Cache-Control", "private, no-store");
+
     const [, , id, , scanId] = c.req.path.split("/");
 
     if (!UUID.test(id ?? "") || (scanId !== undefined && !UUID.test(scanId))) return c.text("not found", 404);

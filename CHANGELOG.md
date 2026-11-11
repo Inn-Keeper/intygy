@@ -1,10 +1,11 @@
 # Changelog
 
-## Unreleased
+## 1.0.0 — 2026-11-11
 
-### Scan lifecycle and architecture fixes — 2026-11-11
+### Scan lifecycle and architecture fixes
 
-These changes have not been released, deployed, or applied to a live database.
+Released as `v1.0.0`. The hosted API and a fresh database were verified against one
+test repository; see the live verification notes below.
 
 ### Breaking changes
 
@@ -87,10 +88,24 @@ cannot be recovered. See [installation and rollback instructions](docs/INSTALL.m
   **Pull requests: Read & write**. With read-only access the scan was accepted and
   the check failed, but no PR comment appeared.
 
+### Added
+
+- Send `Referrer-Policy: no-referrer`, `X-Robots-Tag: noindex`, and
+  `Cache-Control: private, no-store` on dashboard, scan report, and evidence pages.
+  The URLs remain unauthenticated; this only limits how they leak.
+
 ### Fixed
 
 - Return 404 instead of a 500 for dashboard, evidence, and scan report URLs whose
   project or scan ID is not a UUID.
+
+### Live verification on 2026-11-11
+
+Against the hosted API, a fresh Neon database, and one public test repository:
+installation webhook provisioning, non-blocking first baseline, PR blocking with
+a PR comment, unblocking after the fix, verified default-branch scans, and the
+dashboard, scan report, and evidence pages. Not exercised live: resolved-issue
+history, retry replay, authenticated scans, and migration 001 on existing data.
 
 ### Verification recorded on 2026-11-11
 
