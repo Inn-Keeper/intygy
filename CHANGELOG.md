@@ -20,6 +20,25 @@ Not yet released or deployed.
   pull-request run holding the project key can no longer submit a default-branch
   scan and alter the baseline. Adds the `jose` dependency for token verification.
 
+### Signed project links — 2026-11-11
+
+Not yet released or deployed.
+
+### Breaking changes
+
+- Dashboard, scan report, and evidence pages require a signed link; bare
+  `/p/<project id>` URLs return 404. The API needs a new `LINK_SIGNING_SECRET`
+  variable and refuses to start without it. Set it before deploying.
+- Links expire after 30 days. Links in earlier PR comments and run summaries stop
+  working; any new scan issues a fresh one.
+
+### Added
+
+- Sign project links with an HMAC over the project ID and expiry. Ingest responses
+  and PR comments carry a freshly signed link, including replayed submissions, and
+  pages carry the visitor's signature through their own links. These remain bearer
+  links without user login.
+
 ## 1.0.0 — 2026-11-11
 
 ### Scan lifecycle and architecture fixes

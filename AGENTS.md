@@ -52,8 +52,9 @@ authoritative. `packages/shared` is intentionally types-only and has no
   failure must not roll back an accepted scan.
 - Treat project API keys, GitHub workflow (OIDC) tokens, and webhook signatures as
   authentication boundaries. Scan context must match the verified workflow token.
-  Dashboard and evidence routes remain unauthenticated UUID URLs in the MVP;
-  do not describe them as private or suitable for confidential data.
+  Dashboard, scan report, and evidence routes open only through signed links that
+  expire after 30 days. They are bearer links with no user login; do not describe
+  them as private or suitable for confidential data.
 - Keep customer repositories isolated by project. Never accept repository or
   project identity from an unauthenticated source without checking it against
   the authenticated project.
@@ -92,7 +93,7 @@ unit tests or typecheck exercised them.
 - Keep `README.md`, `docs/ARCHITECTURE.md`, `docs/INSTALL.md`, `action.yml`,
   `examples/`, and environment examples aligned with behavior and configuration
   changes.
-- Preserve honest MVP boundaries: unauthenticated dashboard/evidence routes,
+- Preserve honest MVP boundaries: bearer-link (no login) dashboard/evidence routes,
   manual API-key retrieval, the partial evidence criteria set, and GitHub-only
   support unless the implementation changes.
 - Do not claim full WCAG or EN 301 549 compliance from axe-core scans alone.

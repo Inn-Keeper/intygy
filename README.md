@@ -53,7 +53,8 @@ events; it never treats missing coverage or a green scan as full conformance.
 
 ## Honest MVP boundaries (do before charging money)
 
-- **Dashboard/evidence routes are unauthenticated** (obscure UUID only) — add auth.
+- **Dashboard/evidence routes have no user login** — they open through signed links that
+  expire after 30 days, and anyone holding a link can read the project. Add real auth.
 - API key retrieval is manual (`select api_key from projects`) — build the onboarding page.
 - `CRITERIA` in `evidence.ts` is a 15-item subset — extend to the full WCAG 2.2 AA list.
 - No Stripe yet; no screenshots in PR comments; scans all configured routes (route→file

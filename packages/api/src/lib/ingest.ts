@@ -36,7 +36,7 @@ export async function ingest(query: Query, apiKey: string, payload: ScanPayload,
   if (previous) {
     if (previous.payload_hash !== hash) throw new IngestError("submissionId already used for a different payload", 409);
 
-    return { response: previous.result, newViolations: [], installationId: project.installation_id, replay: true };
+    return { response: previous.result, newViolations: [], installationId: project.installation_id, projectId: project.id, replay: true };
   }
 
   // Read GitHub under the project lock so a queued older scan cannot use a stale
@@ -132,5 +132,5 @@ export async function ingest(query: Query, apiKey: string, payload: ScanPayload,
 
   await query("update scans set result=$2 where id=$1", [scanId, JSON.stringify(response)]);
 
-  return { response, newViolations, installationId: project.installation_id, replay: false };
+  return { response, newViolations, installationId: project.installation_id, projectId: project.id, replay: false };
 }

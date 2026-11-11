@@ -11,6 +11,7 @@ import { contextMismatch, verifyWorkflowToken as defaultVerifyWorkflowToken, typ
 import { applyWebhook, WebhookSchema } from "./lib/webhook.js";
 import { renderScan } from "./lib/report.js";
 import { esc, pageShell } from "./lib/html.js";
+import { linkQuery, validLink } from "./lib/links.js";
 
 const UUID = /^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i;
 
@@ -21,6 +22,7 @@ export function createApp(deps: {
   verifyWorkflowToken?: VerifyWorkflowToken;
   postComment?: typeof defaultComment;
   webhookSecret?: string;
+  linkSecret?: string;
   baseUrl?: string;
 } = {}) {
   const q = deps.query ?? defaultQuery;
@@ -30,6 +32,11 @@ export function createApp(deps: {
   const WEBHOOK_SECRET = deps.webhookSecret ?? process.env.GITHUB_WEBHOOK_SECRET;
   if (!WEBHOOK_SECRET) {
     throw new Error("GITHUB_WEBHOOK_SECRET is not set — refusing to start with a forgeable webhook signature.");
+  }
+
+  const LINK_SECRET = deps.linkSecret ?? process.env.LINK_SIGNING_SECRET;
+  if (!LINK_SECRET) {
+    throw new Error("LINK_SIGNING_SECRET is not set — refusing to start with forgeable dashboard links.");
   }
 
   const app = new Hono();
@@ -82,13 +89,16 @@ export function createApp(deps: {
 
     const result = await transaction((query) => ingest(query, apiKey, payload, BASE, deps.verifyRepository ?? defaultVerifyRepository));
 
-    if (!result.replay && result.response.blocked && payload.prNumber) {
+    // Signed per response rather than stored, so a replayed submission gets a fresh link.
+    const response = { ...result.response, dashboardUrl: result.response.dashboardUrl + linkQuery(LINK_SECRET, result.projectId) };
+
+    if (!result.replay && response.blocked && payload.prNumber) {
       await commentOnPr(result.installationId, payload.repo, payload.prNumber,
-        buildPrComment(result.newViolations, result.response.dashboardUrl))
+        buildPrComment(result.newViolations, response.dashboardUrl))
         .catch(() => console.error("PR comment failed; findings remain available in the scan report."));
     }
 
-    return c.json(result.response);
+    return c.json(response);
   });
 
   /* ------------------------------------------------------------------ */
@@ -128,7 +138,21 @@ export function createApp(deps: {
 
     if (!UUID.test(id ?? "") || (scanId !== undefined && !UUID.test(scanId))) return c.text("not found", 404);
 
+    const exp = c.req.query("exp"), sig = c.req.query("sig");
+
+    // Unsigned, expired, and other projects' links look the same as a missing page.
+    if (!validLink(LINK_SECRET, id, exp, sig)) return c.text("not found", 404);
+
     await next();
+
+    // ponytail: carry the signature onto the page's own project links by rewriting the
+    // rendered HTML, so renderers stay unaware of signing. Pass it explicitly if pages
+    // ever link across projects. `exp` and `sig` are validated digits and hex.
+    if (c.res.headers.get("content-type")?.startsWith("text/html")) {
+      const html = (await c.res.text()).replaceAll(new RegExp(`href="(/p/${id}[^"?]*)"`, "g"), `href="$1?exp=${exp}&amp;sig=${sig}"`);
+
+      c.res = new Response(html, { status: c.res.status, headers: c.res.headers });
+    }
   });
 
   app.get("/p/:id", async (c) => {

@@ -2,7 +2,10 @@ import { readFileSync } from "node:fs";
 import { database } from "./database.js";
 import { createApp } from "../src/app.js";
 import type { Query } from "../src/lib/db.js";
+import { linkQuery } from "../src/lib/links.js";
 export const projectId = "00000000-0000-4000-8000-000000000001";
+/** A page path carrying a valid signed link for its project. */
+export const signed = (path: string, id = projectId) => path + linkQuery("link-secret", id);
 export const violation = (selector = ".old", route = "/", viewport = "desktop") => ({
   ruleId: "button-name", wcag: ["wcag412"], impact: "critical", description: "Missing name",
   helpUrl: "https://example.com/fix", route, viewport, nodes: [{ selector }],
@@ -24,7 +27,7 @@ export async function setup(t: import("node:test").TestContext) {
     // Tests use the identity itself as the token; signature checks belong to jose.
     verifyWorkflowToken: async (token) => JSON.parse(token),
     postComment: async () => { comments++; if (state.commentFails) throw new Error("GitHub unavailable"); },
-    webhookSecret: "test", baseUrl: "https://intygy.test",
+    webhookSecret: "test", linkSecret: "link-secret", baseUrl: "https://intygy.test",
   });
   let sequence = 0;
   /** `identity` overrides what the workflow token attests; null omits the token. */

@@ -2,7 +2,11 @@
 
 Intygy scans inside customer GitHub Actions and stores results in an operator-hosted
 Hono/Postgres API. The installed GitHub App verifies repository metadata and posts
-PR comments. Dashboard, scan-report, and evidence URLs are public UUID URLs.
+PR comments. Dashboard, scan-report, and evidence pages open only through links signed with
+`LINK_SIGNING_SECRET` (HMAC over project ID and expiry, valid 30 days). One signature covers
+all pages of a project, and each ingest response and PR comment carries a fresh link. These
+are bearer links: anyone holding an unexpired link can read the project, there is no user
+login, and rotating the secret revokes every link at once.
 
 ```mermaid
 flowchart LR

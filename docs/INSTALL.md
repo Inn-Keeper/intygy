@@ -47,6 +47,8 @@ Set these environment variables (see `packages/api/.env.example`):
 - `PUBLIC_BASE_URL` — your deployed API URL (or `http://localhost:3000`). It must equal the
   `api-base` customers pass to the Action, without a trailing slash: workflow tokens are issued for it.
 - `GITHUB_APP_ID`, `GITHUB_APP_PRIVATE_KEY_B64`, `GITHUB_WEBHOOK_SECRET` — from Step 3
+- `LINK_SIGNING_SECRET` — generate with `openssl rand -hex 32`. Signs dashboard and report
+  links; the API will not start without it, and changing it invalidates every issued link.
 
 ## Step 3 — Register the GitHub App (10 min)
 
@@ -118,7 +120,7 @@ In the repo you're protecting:
 3. The check goes **red**, and the Intygy bot comments on the PR with the rule,
    the WCAG criterion, the selector, and a fix link.
 4. Fix it, push, check goes green. Merge to `main` → the **push** workflow runs and records
-   resolved issues within the scanned coverage. Visit `/p/<project-id>/evidence` — the dossier should show updated
+   resolved issues within the scanned coverage. Open the dashboard link from the run summary, then **Evidence history** — the dossier should show updated
    resolution counts.
 
 ## Troubleshooting
@@ -137,6 +139,9 @@ In the repo you're protecting:
   forks cannot obtain a token (or the key) and are not scanned.
 - **Scan does not match the workflow token (403)** — the reported repository, branch,
   commit, or pull request differs from the run GitHub attests. Check out the triggering commit.
+- **Dashboard or report shows "not found"** — the link is unsigned, older than 30 days, or
+  was issued before `LINK_SIGNING_SECRET` changed. Open the link from a recent run summary
+  or PR comment; any new scan issues a fresh one.
 - **Webhook 401** — `GITHUB_WEBHOOK_SECRET` mismatch between App settings and env.
 - **Playwright install slow in CI** — first run downloads Chromium (~1 min);
   add `actions/cache` on `~/.cache/ms-playwright` keyed to the playwright version.
