@@ -101,8 +101,9 @@ select repo, api_key, id from projects;
 In the repo you're protecting:
 
 1. Settings → Secrets → Actions → new secret `INTYGY_KEY` = the api_key from Step 4.
-2. Copy `examples/intygy-workflow.yml` → `.github/workflows/intygy.yml`, replacing
-   `YOUR_DEPLOYED_API_URL`. The workflow runs on **pull requests**
+2. Copy `examples/intygy-workflow.yml` → `.github/workflows/intygy.yml`. Its `api-base`
+   points at the hosted API, `https://intygy-api.onrender.com`; replace it if you run your
+   own, and keep it equal to that API's `PUBLIC_BASE_URL`. The workflow runs on **pull requests**
    (gate new violations) and **pushes to `main`** (update baseline, mark resolved issues).
 3. Copy `examples/intygy.yml` → repo root; set real routes. No Vercel/Netlify previews?
    Use the `serve:` variant and add your app's dependency-install/build prerequisites to the workflow.

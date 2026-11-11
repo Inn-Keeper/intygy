@@ -22,7 +22,7 @@ jobs:
       - uses: Inn-Keeper/intygy@v1
         with:
           api-key: ${{ secrets.INTYGY_KEY }}
-          api-base: https://YOUR_DEPLOYED_API_URL
+          api-base: https://intygy-api.onrender.com
         env:
           # Customer repo token — used by the Action to find Vercel/Netlify preview URLs.
           # The Intygy GitHub App (operator-hosted) posts PR comments separately.
