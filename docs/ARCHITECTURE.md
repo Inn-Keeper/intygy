@@ -1,261 +1,150 @@
 # Intygy — Architecture
 
-## Overview
-
-Intygy splits work between **customer CI** (heavy scanning) and **operator-hosted API** (baseline logic, evidence, PR comments).
+Intygy scans inside customer GitHub Actions and stores results in an operator-hosted
+Hono/Postgres API. The installed GitHub App verifies repository metadata and posts
+PR comments. Dashboard, scan-report, and evidence URLs are public UUID URLs.
 
 ```mermaid
 flowchart LR
-  subgraph customer["Customer GitHub repo"]
-    WF["workflow: PR + push to main"]
-    ACT["Intygy Action"]
-    PW["Playwright + axe-core"]
-    WF --> ACT --> PW
-  end
-
-  subgraph operator["Intygy operator"]
-    API["Hono API"]
-    DB[(Postgres)]
-    APP["GitHub App"]
-    API --> DB
-    API --> APP
-  end
-
-  PW -->|"POST /api/ingest"| API
-  APP -->|"PR comment"| customer
-  APP -->|"install webhook"| API
-  ACT -->|"GITHUB_TOKEN: preview URLs"| customer
+  Workflow[Customer workflow] --> Scanner[Playwright + axe-core]
+  Scanner -->|API key + version 2 payload| API[Hono API]
+  API -->|verify repository and current default head| GitHub[GitHub App]
+  API -->|one transaction per scan| DB[(Postgres)]
+  API -->|after commit| Comment[PR comment]
+  DB --> Reports[Public dashboard, findings and evidence]
+  GitHub -->|signed installation events| API
 ```
 
-## Components
+## Components and trust boundaries
 
-| Component | Location | Responsibility |
-| --- | --- | --- |
-| **Action** | `packages/action` | Resolve app URL, run scans, POST results, fail job if blocked |
-| **API** | `packages/api` | Ingest, fingerprint, baseline diff, dashboard, evidence, webhooks |
-| **Shared types** | `packages/shared/types.ts` | `ScanPayload` / `IngestResponse` contract (imported by action + api) |
-| **Schema** | `db/schema.sql` | Projects, scans, violations, baselines, attestations |
-| **Examples** | `examples/` | Workflow + `intygy.yml` templates for customer repos |
+- `packages/action`: resolve the target, confirm readiness/authentication, scan all
+  configured route/viewport combinations, submit results, and fail on new PR findings.
+- `packages/api/src/app.ts`: testable Hono routes; `index.ts` starts the Node server.
+- `lib/ingest.ts`: authenticated repository isolation, locking, retry replay, and baseline lifecycle.
+- `lib/webhook.ts`: installation provisioning, suspension/removal, and key rotation on reauthorization.
+- `lib/evidence.ts` / `lib/report.ts`: stored coverage, findings, and dated lifecycle events.
+- `packages/shared/types.ts`: versioned Action/API contracts; this directory remains types-only.
 
-`packages/shared` is a types-only folder (no `package.json`). Both packages import it via relative paths and include it in their `tsconfig.json`.
-
-## Authentication (two mechanisms)
-
-| Credential | Who provides it | Used for |
-| --- | --- | --- |
-| `INTYGY_KEY` (API key) | Intygy operator → customer repo secret | Action authenticates to `POST /api/ingest` |
-| `GITHUB_TOKEN` | GitHub Actions (customer repo) | Action reads Deployments API to find preview URLs |
-| **GitHub App** (operator) | Intygy operator env vars | API posts PR comments; webhook provisions projects on install |
-
-Customers never configure the GitHub App directly — they install it once; the operator runs it.
+The project API key authorizes submitted results for exactly one repository. Results
+are customer-produced evidence, not cryptographic proof that a workflow or target
+was trustworthy. The operator's GitHub App needs Metadata read, Contents read (branch
+head verification), and Issues write (PR comments). The customer `GITHUB_TOKEN` needs
+Deployments read when resolving previews. Webhooks require the configured HMAC secret.
 
 ## Scan lifecycle
 
-### 1. First scan (any trigger)
+1. Validate the version 2 payload, including its submission ID, routes, viewports,
+   timestamps and finding coverage. Legacy clients receive an explicit upgrade error.
+2. Begin a transaction and lock the authenticated project row. Recheck repository
+   ownership and active installation/repository authorization under this lock.
+3. If the submission ID already exists, return its stored response unchanged. Reusing
+   an ID with different content returns 409. Removed installations cannot replay scans.
+4. Read the actual default branch and its head SHA through the GitHub App while holding
+   the project lock. This prevents queued requests from using an earlier head snapshot.
+   GitHub verification failures roll back ingestion. Verification requests have timeouts.
+5. Split axe rule groups into one finding per element. The `v2:` fingerprint includes
+   rule, route, viewport, and the exact selector. Sibling positions are significant;
+   selector changes may produce new findings. Node order within an axe result does not.
+6. The first successful scan establishes the baseline without blocking, including a PR
+   scan. A stale default-branch scan cannot initialize a project. After initialization,
+   only a non-PR scan whose branch and SHA match the verified default-branch head may
+   update baseline state. Other branch scans and stale default scans remain in history
+   with an explicit notice and do not accept or resolve debt.
+7. PRs compare against open baseline fingerprints. New elements block; known debt does not.
+8. Default-branch updates absorb observed findings. Missing findings resolve only when
+   their route, viewport and ruleset are all covered by this successful scan. Removing a
+   route/viewport or changing rulesets does not manufacture fixes. Unmapped legacy rows
+   remain unchanged and visibly outside verified coverage.
+9. Persist the scan, findings, baseline updates, lifecycle events, and exact response in
+   one transaction. A database error rolls everything back. Per-project row locks also
+   serialize concurrent first scans. Scan receipt timestamps are taken after acquiring
+   the lock, rather than using a waiting transaction's start time.
+10. After commit, attempt a PR comment once. Failure cannot roll back the scan; all
+    findings remain available in the linked scan report. Replays do not duplicate comments.
+    Comment delivery is best-effort; there is no background retry queue in this MVP.
 
-- API has no baseline → `isFirstScan = true`
-- All violations absorbed into `baselines` table
-- `blocked: false` — check passes, legacy debt is recorded not punished
+The Action generates a UUID once per invocation, preserving it and the exact payload
+across up to three transport attempts. Separate steps, matrix jobs, and workflow reruns
+are distinct scans. Client requests have a 30-second timeout. A fresh invocation is not
+an idempotent retry of an older invocation.
 
-### 2. Pull request scan
+## Coverage and scanner behavior
 
-- Action sends `prNumber` in payload
-- API fingerprints each violation (`rule|route|viewport|selector`, nth-child normalized)
-- Violations not in open baseline → **new** → `blocked: true`, GitHub App comments on PR
-- Action fails the CI job
+`readySelector` is required and must identify loaded application content on every route.
+HTTP errors, unexpected redirects (except a trailing slash), missing readiness, and
+unconfirmed authentication fail the scan before ingestion. Configure canonical routes;
+query strings and URL fragments are part of the destination check. Route normalization
+cannot leave the target origin. Login additionally requires `auth.success_selector`,
+which must be visible after login and on each scanned page.
 
-### 3. Push to default branch (e.g. `main`)
+All failing axe nodes are retained. Single selectors remain plain CSS; compound
+iframe/shadow targets use structured JSON to retain their boundaries. Only violations
+are persisted; axe's absence of a violation is not proof of criterion conformance.
+Interactive states beyond the configured initial page state still require manual testing.
 
-- Workflow must include `push: branches: [main]` — see `examples/intygy-workflow.yml`
-- Action sends no `prNumber`; `branch` = default branch name
-- API absorbs current violations into baseline
-- Violations in baseline but absent from scan → `resolved_at` set (evidence burn-down)
+A fixed staging URL does not prove that a PR's code was deployed there. Prefer a preview
+resolved for the commit or a local build. The GitHub check authenticates repository state,
+not the provenance of the rendered bytes. For local PR builds, check out the PR head SHA
+so the recorded commit matches the code being served.
 
-```text
-PR opened     → scan → diff vs baseline → block if new
-PR merged     → (no scan yet)
-Push to main  → scan → update baseline → mark resolved issues
-Evidence page → shows resolution history from baselines.resolved_at
-```
+## Installation lifecycle
+
+Provisioning reads the actual default branch; every new ingestion refreshes it to handle
+renames. Repository removal disables that project. Installation deletion disables the
+installation and its projects. Suspension pauses ingestion; unsuspension restores the
+installation without restoring repositories previously removed. Re-adding a removed
+repository or changing installations rotates its API key. The operator must deliver the
+new key manually. Duplicate provisioning preserves active keys.
 
 ## API routes
 
-| Route | Auth | Purpose |
+| Route | Authentication | Purpose |
 | --- | --- | --- |
-| `POST /api/ingest` | Bearer API key | Receive scan results from Action |
-| `POST /api/github/webhook` | HMAC signature | GitHub App install → create project + API key |
-| `GET /p/:id` | None (UUID obscurity) | Project dashboard |
-| `GET /p/:id/evidence` | None (UUID obscurity) | EN 301 549 evidence dossier |
-| `GET /healthz` | None | Health check |
+| `POST /api/ingest` | Project Bearer key | Validate, store, compare and return gate result |
+| `POST /api/github/webhook` | HMAC signature | Installation and repository lifecycle |
+| `GET /p/:id` | None | Recent scans and baseline count |
+| `GET /p/:id/scans/:scanId` | None | Every finding for that project's scan |
+| `GET /p/:id/evidence` | None | Recorded coverage, partial criteria register and lifecycle events |
+| `GET /healthz` | None | Process liveness, not database readiness |
 
-## Deployment topology
+## Evidence and migration
 
-**Operator** (you):
+Evidence uses the latest accepted default-branch scan, shows its commit/date/routes/
+viewports/ruleset, and distinguishes unknown coverage, observed findings and no recorded
+automated findings. PR scans are never counted as merges. Criteria still require manual
+review; attestations are dated records and do not prove the current commit is conformant.
 
-1. Deploy `packages/api` (Railway, Fly, Render, etc.)
-2. Run `db/schema.sql` against Postgres
-3. Register GitHub App pointing webhook at `/api/github/webhook`
-4. Build and commit `packages/action/dist`, then publish a GitHub Release `vX.Y.Z` (moves the `vX` tag; tick "Publish to Marketplace")
+`baseline_events` preserves observed, resolved and reopened events linked to scans.
+Reopening never deletes prior resolution history. Legacy first-seen and last-resolution
+dates are imported with a legacy label; earlier overwritten cycles cannot be recovered.
 
-**Customer** (per protected repo):
+For existing databases, stop the API and apply `db/migrations/001-flow-integrity.sql`
+before deploying the updated API and Action together. See `INSTALL.md` for rollout and
+backup instructions. Fresh installations apply `db/schema.sql`.
 
-1. Install your GitHub App on their repo
-2. Add `INTYGY_KEY` secret
-3. Copy `intygy-workflow.yml` + `intygy.yml`
-4. CI runs on every PR and every push to `main`
+## Verification
 
-One API instance serves many customer repos (multi-tenant via `projects` table).
-
-## Target resolution (`intygy.yml`)
-
-| `target` | When to use | Notes |
-| --- | --- | --- |
-| `preview` | Vercel/Netlify with PR previews | Needs `GITHUB_TOKEN`; polls Deployments API |
-| `{ url }` | Fixed staging/production URL | Simple; same URL for PR and push |
-| `{ serve, url }` | Static sites or local serve in CI | Builds and serves inside the runner |
-
-For `push` to `main` with `target: preview`, the host must deploy that commit (production or preview) before the workflow runs. If push scans fail to find a deployment, switch to `serve:` or a fixed `url:` for the main-branch job.
-
-## Testing
-
-### 1. Unit tests (no infra)
-
-```bash
-pnpm install
+```sh
+pnpm install --frozen-lockfile
+pnpm --filter @intygy/action exec playwright install --with-deps chromium
 pnpm test
 pnpm typecheck
-```
-
-Covers fingerprint stability, payload validation, and comment label parsing.
-
-### 2. Build the Action bundle
-
-```bash
 pnpm build:action
-ls packages/action/dist/index.js   # must be committed: `uses: Inn-Keeper/intygy@v1` runs it
 ```
 
-### 3. Local API + simulated scans
+Tests exercise real SQL through development-only PGlite by default. Set
+`INTYGY_TEST_DATABASE_URL` to a **disposable Postgres database** to run the same migration,
+rollback, concurrency, authorization and reporting tests over independent connections.
+The harness creates and drops isolated test schemas; never point it at production. CI
+provides Postgres 16 and Chromium. PGlite serializes its transactions and therefore does
+not independently prove multi-connection lock behavior.
 
-Start Postgres (or Supabase), apply schema, run API:
+For a locally installed Chrome, `INTYGY_TEST_BROWSER_CHANNEL=chrome pnpm test` runs the
+browser tests without downloading Chromium. Live GitHub App permissions, real preview
+deployments, and hosted ingestion still require separate end-to-end acceptance:
 
-```bash
-export DATABASE_URL=postgres://user:pass@localhost:5432/intygy
-export GITHUB_APP_ID=1
-export GITHUB_APP_PRIVATE_KEY_B64=$(base64 < test-key.pem | tr -d '\n')
-export GITHUB_WEBHOOK_SECRET=test-secret
-export PUBLIC_BASE_URL=http://localhost:3000
-pnpm dev:api
-```
-
-Seed a project (or trigger webhook via smee.io). Then simulate the three scan phases:
-
-**A — First scan (establish baseline):**
-
-```bash
-API_KEY=igy_your_key_here
-
-curl -s -X POST http://localhost:3000/api/ingest \
-  -H "Authorization: Bearer $API_KEY" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "repo": "acme/shop",
-    "sha": "abc111",
-    "branch": "main",
-    "ruleset": "wcag22-aa",
-    "routesScanned": ["/"],
-    "startedAt": "2026-07-09T10:00:00.000Z",
-    "finishedAt": "2026-07-09T10:01:00.000Z",
-    "violations": [{
-      "ruleId": "color-contrast",
-      "wcag": ["wcag2aa", "wcag143"],
-      "impact": "serious",
-      "description": "Low contrast",
-      "helpUrl": "https://dequeuniversity.com/rules/axe/4.10/color-contrast",
-      "route": "/",
-      "viewport": "desktop",
-      "nodes": [{ "selector": ".btn" }]
-    }]
-  }' | jq
-# Expect: blocked=false, baselineOpenCount=1
-```
-
-**B — PR scan introducing a new violation:**
-
-```bash
-curl -s -X POST http://localhost:3000/api/ingest \
-  -H "Authorization: Bearer $API_KEY" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "repo": "acme/shop",
-    "sha": "def222",
-    "branch": "feature",
-    "prNumber": 42,
-    "ruleset": "wcag22-aa",
-    "routesScanned": ["/"],
-    "startedAt": "2026-07-09T11:00:00.000Z",
-    "finishedAt": "2026-07-09T11:01:00.000Z",
-    "violations": [
-      {
-        "ruleId": "color-contrast",
-        "wcag": ["wcag2aa", "wcag143"],
-        "impact": "serious",
-        "description": "Low contrast",
-        "helpUrl": "https://dequeuniversity.com/rules/axe/4.10/color-contrast",
-        "route": "/",
-        "viewport": "desktop",
-        "nodes": [{ "selector": ".btn" }]
-      },
-      {
-        "ruleId": "button-name",
-        "wcag": ["wcag2a", "wcag412"],
-        "impact": "critical",
-        "description": "Missing name",
-        "helpUrl": "https://dequeuniversity.com/rules/axe/4.10/button-name",
-        "route": "/",
-        "viewport": "desktop",
-        "nodes": [{ "selector": ".icon-btn" }]
-      }
-    ]
-  }' | jq
-# Expect: blocked=true, newCount=1
-```
-
-**C — Push to main with fix (mark resolved):**
-
-```bash
-curl -s -X POST http://localhost:3000/api/ingest \
-  -H "Authorization: Bearer $API_KEY" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "repo": "acme/shop",
-    "sha": "ghi333",
-    "branch": "main",
-    "ruleset": "wcag22-aa",
-    "routesScanned": ["/"],
-    "startedAt": "2026-07-09T12:00:00.000Z",
-    "finishedAt": "2026-07-09T12:01:00.000Z",
-    "violations": []
-  }' | jq
-# Expect: blocked=false; baselines.resolved_at set for prior open issues
-```
-
-Verify in Postgres:
-
-```sql
-select fingerprint, first_seen, resolved_at from baselines order by first_seen;
-select count(*) from baselines where resolved_at is not null;  -- should be > 0 after step C
-```
-
-Open `http://localhost:3000/p/<project-id>/evidence` — resolved count should reflect step C.
-
-### 4. End-to-end on GitHub
-
-Follow [INSTALL.md](./INSTALL.md). After wiring a target repo:
-
-1. **PR #1** → green, baseline established (job summary shows open issue count)
-2. **PR #2** with intentional a11y regression → red, Intygy bot comments
-3. Fix and push → green
-4. **Merge to main** → push workflow runs → check evidence page for updated `resolved` count
-
-Confirm both workflow triggers fired: Actions tab should show runs for `pull_request` and `push` events.
+1. Install the App, retrieve the project key, and run an initial scan (green).
+2. Add an inaccessible element in a PR (red, complete scan report, best-effort comment).
+3. Fix it and merge; verify the default-branch scan records resolution history.
+4. Remove a scanned route and confirm its old findings remain open/outside coverage.
+5. Remove the repository from the App and confirm its key no longer ingests results.

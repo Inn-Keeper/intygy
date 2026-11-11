@@ -20,10 +20,19 @@ test("same violation on different viewports gets distinct fingerprints", () => {
   assert.notEqual(fingerprint(violation("desktop")), fingerprint(violation("mobile")));
 });
 
-test("fingerprint still stable across nth-child reshuffles", () => {
+test("distinct sibling elements must not share a fingerprint", () => {
   const a = violation("desktop");
   const b = { ...a, nodes: [{ selector: ".btn:nth-child(3)" }] };
-  assert.equal(fingerprint(a), fingerprint(b));
+  assert.notEqual(fingerprint(a), fingerprint(b));
+});
+
+test("versioned payload rejects missing coverage and retry identity", () => {
+  const legacy = {
+    repo: "acme/shop", sha: "abc123", ruleset: "wcag22-aa", routesScanned: ["/"],
+    startedAt: "2026-07-07T10:00:00.000Z", finishedAt: "2026-07-07T10:01:00.000Z", violations: [],
+  };
+
+  assert.equal(ScanPayloadSchema.safeParse(legacy).success, false);
 });
 
 test("criterion label fallback handles two-digit sub-criteria", () => {
@@ -33,10 +42,13 @@ test("criterion label fallback handles two-digit sub-criteria", () => {
 
 test("ingest payload schema accepts a valid scan and rejects junk", () => {
   const valid = {
+    version: 2,
+    submissionId: "run-1-attempt-1",
     repo: "acme/shop",
     sha: "abc123",
     ruleset: "wcag22-aa",
     routesScanned: ["/"],
+    viewports: ["desktop"],
     startedAt: "2026-07-07T10:00:00.000Z",
     finishedAt: "2026-07-07T10:01:00.000Z",
     violations: [violation("desktop")],

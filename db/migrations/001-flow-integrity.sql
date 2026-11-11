@@ -1,0 +1,54 @@
+-- Apply with the API stopped. This transaction is safe to rerun.
+BEGIN;
+ALTER TABLE installations ADD COLUMN IF NOT EXISTS active boolean NOT NULL DEFAULT true;
+ALTER TABLE projects ADD COLUMN IF NOT EXISTS active boolean NOT NULL DEFAULT true;
+ALTER TABLE projects ADD COLUMN IF NOT EXISTS baseline_initialized boolean NOT NULL DEFAULT false;
+ALTER TABLE scans ADD COLUMN IF NOT EXISTS submission_id text;
+ALTER TABLE scans ADD COLUMN IF NOT EXISTS payload_hash text;
+ALTER TABLE scans ADD COLUMN IF NOT EXISTS result jsonb;
+ALTER TABLE scans ADD COLUMN IF NOT EXISTS viewports jsonb;
+ALTER TABLE scans ADD COLUMN IF NOT EXISTS baseline_updated boolean NOT NULL DEFAULT false;
+CREATE UNIQUE INDEX IF NOT EXISTS scans_submission_idx ON scans(project_id, submission_id);
+ALTER TABLE baselines ADD COLUMN IF NOT EXISTS route text;
+ALTER TABLE baselines ADD COLUMN IF NOT EXISTS viewport text;
+ALTER TABLE baselines ADD COLUMN IF NOT EXISTS ruleset text;
+ALTER TABLE baselines ADD COLUMN IF NOT EXISTS rule_id text;
+ALTER TABLE baselines ADD COLUMN IF NOT EXISTS selector text;
+ALTER TABLE baselines ADD COLUMN IF NOT EXISTS legacy_fingerprint text;
+CREATE TABLE IF NOT EXISTS baseline_events (
+  id bigserial PRIMARY KEY,
+  project_id uuid NOT NULL REFERENCES projects(id),
+  fingerprint text NOT NULL,
+  scan_id uuid REFERENCES scans(id),
+  kind text NOT NULL CHECK (kind IN ('observed', 'resolved', 'reopened')),
+  occurred_at timestamptz NOT NULL DEFAULT now(),
+  source text NOT NULL DEFAULT 'scan' CHECK (source IN ('scan', 'legacy'))
+);
+CREATE INDEX IF NOT EXISTS baseline_events_project_idx ON baseline_events(project_id, id);
+CREATE TABLE IF NOT EXISTS schema_migrations (version text PRIMARY KEY);
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM schema_migrations WHERE version = '001-flow-integrity') THEN
+    -- Legacy data retained only the first selector. Preserve that known debt;
+    -- never absorb unrecorded additional nodes just to make the migration green.
+    WITH latest AS (
+      SELECT DISTINCT ON (s.project_id, v.fingerprint)
+        s.project_id, v.fingerprint, v.rule_id, v.route, v.viewport, v.selector, s.ruleset
+      FROM violations v JOIN scans s ON s.id = v.scan_id
+      ORDER BY s.project_id, v.fingerprint, s.created_at DESC, s.id DESC
+    )
+    UPDATE baselines b SET legacy_fingerprint = b.fingerprint,
+      fingerprint = 'v2:' || left(encode(digest(v.rule_id || '|' || v.route || '|' || v.viewport || '|' || v.selector, 'sha256'), 'hex'), 24),
+      route = v.route, viewport = v.viewport, ruleset = v.ruleset, rule_id = v.rule_id, selector = v.selector
+    FROM latest v WHERE b.project_id = v.project_id AND b.fingerprint = v.fingerprint
+      AND b.fingerprint NOT LIKE 'v2:%';
+    -- Unmappable legacy rows stay open/unchanged and are never auto-resolved.
+    INSERT INTO baseline_events(project_id, fingerprint, kind, occurred_at, source)
+      SELECT project_id, fingerprint, 'observed', first_seen, 'legacy' FROM baselines;
+    INSERT INTO baseline_events(project_id, fingerprint, kind, occurred_at, source)
+      SELECT project_id, fingerprint, 'resolved', resolved_at, 'legacy' FROM baselines WHERE resolved_at IS NOT NULL;
+    UPDATE projects SET baseline_initialized = true WHERE EXISTS (SELECT 1 FROM scans WHERE project_id = projects.id);
+    INSERT INTO schema_migrations VALUES ('001-flow-integrity');
+  END IF;
+END $$;
+COMMIT;

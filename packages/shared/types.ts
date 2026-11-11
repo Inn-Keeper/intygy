@@ -22,6 +22,9 @@ export interface Violation {
 }
 
 export interface ScanPayload {
+  version: 2;
+  /** Stable across transport retries; a new workflow attempt uses a new ID. */
+  submissionId: string;
   /** "owner/name" */
   repo: string;
   sha: string;
@@ -30,6 +33,8 @@ export interface ScanPayload {
   prNumber?: number;
   ruleset: string;
   routesScanned: string[];
+  /** All routes were successfully scanned at every listed viewport. */
+  viewports: ViewportName[];
   startedAt: string;
   finishedAt: string;
   violations: Violation[];
@@ -44,4 +49,7 @@ export interface IngestResponse {
   /** True when newCount > 0 on a PR scan: the Action should fail the job. */
   blocked: boolean;
   dashboardUrl: string;
+  baselineUpdated: boolean;
+  /** Explains a stale or non-default-branch scan that did not update the baseline. */
+  notice?: string;
 }

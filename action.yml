@@ -1,5 +1,5 @@
 name: "Intygy Accessibility Check"
-description: "Scans the routes your PR affects with axe-core + Playwright and reports results to Intygy. Fails on new WCAG violations."
+description: "Scans configured routes with axe-core + Playwright and reports every failing element to Intygy. Fails on new PR findings."
 branding:
   icon: "check-circle"
   color: "green"
