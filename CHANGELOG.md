@@ -1,17 +1,15 @@
 # Changelog
 
-## Unreleased
+## 1.0.0 — 2026-11-11
 
-### Workflow identity — 2026-11-11
-
-Not yet released or deployed.
+### Workflow identity
 
 ### Breaking changes
 
 - Ingestion requires a GitHub Actions OIDC token. Customer workflows must grant
   `id-token: write`, and the Action's `api-base` must equal the API's
-  `PUBLIC_BASE_URL`. Deploy the API and Action together; older Actions receive a
-  401 that names the missing permission.
+  `PUBLIC_BASE_URL`. Deploy the API and Action together; an Action without the
+  token receives a 401 that names the missing permission.
 
 ### Added
 
@@ -20,9 +18,7 @@ Not yet released or deployed.
   pull-request run holding the project key can no longer submit a default-branch
   scan and alter the baseline. Adds the `jose` dependency for token verification.
 
-### Signed project links — 2026-11-11
-
-Not yet released or deployed.
+### Signed project links
 
 ### Breaking changes
 
@@ -39,12 +35,10 @@ Not yet released or deployed.
   pages carry the visitor's signature through their own links. These remain bearer
   links without user login.
 
-## 1.0.0 — 2026-11-11
-
 ### Scan lifecycle and architecture fixes
 
-Released as `v1.0.0`. The hosted API and a fresh database were verified against one
-test repository; see the live verification notes below.
+The hosted API and a fresh database were verified against one test repository; see
+the live verification notes below.
 
 ### Breaking changes
 
