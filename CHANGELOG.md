@@ -75,6 +75,12 @@ fingerprint, and available first-seen/resolution dates. Unmappable baseline rows
 remain unchanged. Previously discarded nodes and overwritten historical cycles
 cannot be recovered. See [installation and rollback instructions](docs/INSTALL.md).
 
+### Changed
+
+- Document Neon as the hosted Postgres provider in place of Supabase: pooled runtime
+  versus direct administrative connection strings and idle-wake behavior. No code,
+  schema, or payload changes.
+
 ### Verification recorded on 2026-11-11
 
 - `INTYGY_TEST_BROWSER_CHANNEL=chrome pnpm test`: 40 passed, none failed or skipped.

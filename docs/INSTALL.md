@@ -19,9 +19,16 @@ Marketplace** on the release form to list it.
 
 ## Step 1 — Database (5 min)
 
-Create a Postgres instance — Supabase (choose an EU region) free tier is fine.
-Run `db/schema.sql` against it (Supabase: SQL Editor → paste → run).
-Copy the connection string.
+Create a Postgres instance — a Neon project (choose an EU region near the API host) free
+tier is fine. Run `db/schema.sql` against it (Neon: SQL Editor → paste → run, or `psql`
+with the **direct** connection string). Copy the **pooled** connection string (host contains
+`-pooler`, ends with `?sslmode=require`) for the API; keep the direct one for schema changes
+and dump/restore.
+
+Neon suspends idle compute by default. The first request after inactivity waits for it to
+wake, typically a few hundred milliseconds to a few seconds; disable scale-to-zero in the Neon project
+if that matters. Free Render web services also sleep when idle, which adds a much longer
+cold start to the first webhook or scan.
 
 ## Step 2 — Deploy the API (10 min)
 
@@ -84,7 +91,7 @@ API creates a project row. Get its API key:
 select repo, api_key, id from projects;
 ```
 
-(Supabase SQL editor. Yes, manual for now — the onboarding UI is the first post-MVP task.)
+(Neon SQL Editor. Yes, manual for now — the onboarding UI is the first post-MVP task.)
 
 ## Step 5 — Wire up the target repo (5 min)
 
