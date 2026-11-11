@@ -11,7 +11,8 @@ const ResponseSchema = z.object({
   notice: z.string().optional(),
 });
 
-export async function submitScan(apiBase: string, apiKey: string, payload: ScanPayload): Promise<IngestResponse> {
+/** `workflowToken` is the GitHub OIDC token proving which workflow run produced the scan. */
+export async function submitScan(apiBase: string, apiKey: string, workflowToken: string, payload: ScanPayload): Promise<IngestResponse> {
   const body = JSON.stringify(payload);
 
   for (let attempt = 0; attempt < 3; attempt++) {
@@ -20,7 +21,7 @@ export async function submitScan(apiBase: string, apiKey: string, payload: ScanP
     try {
       response = await fetch(`${apiBase.replace(/\/$/, "")}/api/ingest`, {
         method: "POST",
-        headers: { "content-type": "application/json", authorization: `Bearer ${apiKey}` },
+        headers: { "content-type": "application/json", authorization: `Bearer ${apiKey}`, "x-intygy-workflow-token": workflowToken },
         body,
         signal: AbortSignal.timeout(30_000),
       });

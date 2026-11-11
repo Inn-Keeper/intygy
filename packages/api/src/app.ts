@@ -7,6 +7,7 @@ import { commentOnPr as defaultComment } from "./lib/github.js";
 import { buildPrComment } from "./lib/comment.js";
 import { renderEvidence } from "./lib/evidence.js";
 import { ScanPayloadSchema } from "./lib/payload.js";
+import { contextMismatch, verifyWorkflowToken as defaultVerifyWorkflowToken, type VerifyWorkflowToken } from "./lib/oidc.js";
 import { applyWebhook, WebhookSchema } from "./lib/webhook.js";
 import { renderScan } from "./lib/report.js";
 import { esc, pageShell } from "./lib/html.js";
@@ -17,6 +18,7 @@ export function createApp(deps: {
   query?: Query;
   transact?: typeof defaultTransaction;
   verifyRepository?: VerifyRepository;
+  verifyWorkflowToken?: VerifyWorkflowToken;
   postComment?: typeof defaultComment;
   webhookSecret?: string;
   baseUrl?: string;
@@ -24,6 +26,7 @@ export function createApp(deps: {
   const q = deps.query ?? defaultQuery;
   const transaction = deps.transact ?? defaultTransaction;
   const commentOnPr = deps.postComment ?? defaultComment;
+  const verifyWorkflowToken = deps.verifyWorkflowToken ?? defaultVerifyWorkflowToken;
   const WEBHOOK_SECRET = deps.webhookSecret ?? process.env.GITHUB_WEBHOOK_SECRET;
   if (!WEBHOOK_SECRET) {
     throw new Error("GITHUB_WEBHOOK_SECRET is not set — refusing to start with a forgeable webhook signature.");
@@ -60,6 +63,23 @@ export function createApp(deps: {
     }
 
     const payload = parsed.data;
+    const token = c.req.header("x-intygy-workflow-token");
+
+    if (!token) {
+      return c.json({ error: "missing workflow token; add `permissions: id-token: write` to the Intygy job and upgrade the Action" }, 401);
+    }
+
+    // The audience is this API's public URL, so a token minted for another service is rejected.
+    const identity = await verifyWorkflowToken(token, BASE).catch(() => null);
+
+    if (!identity) {
+      return c.json({ error: "invalid workflow token; the Action's api-base must equal the API's PUBLIC_BASE_URL" }, 401);
+    }
+
+    const mismatch = contextMismatch(identity, payload);
+
+    if (mismatch) return c.json({ error: `scan ${mismatch} does not match the workflow token` }, 403);
+
     const result = await transaction((query) => ingest(query, apiKey, payload, BASE, deps.verifyRepository ?? defaultVerifyRepository));
 
     if (!result.replay && result.response.blocked && payload.prNumber) {

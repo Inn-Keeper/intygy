@@ -16,11 +16,12 @@ test("transport retries preserve the complete submission and return the committe
 
   t.mock.method(globalThis, "fetch", async (_url: string, init: RequestInit) => {
     requests.push(String(init.body));
+    assert.equal((init.headers as Record<string, string>)["x-intygy-workflow-token"], "token");
     if (requests.length === 1) throw new Error("connection lost after commit");
 
     return Response.json(result);
   });
-  assert.deepEqual(await submitScan("https://example.com", "key", payload), result);
+  assert.deepEqual(await submitScan("https://example.com", "key", "token", payload), result);
   assert.equal(requests.length, 2);
   assert.equal(requests[0], requests[1]);
 });
@@ -28,5 +29,5 @@ test("transport retries preserve the complete submission and return the committe
 test("invalid successful response never turns into a green check", async (t) => {
   t.mock.method(globalThis, "fetch", async () => Response.json({}));
 
-  await assert.rejects(submitScan("https://example.com", "key", payload), /invalid.*response/i);
+  await assert.rejects(submitScan("https://example.com", "key", "token", payload), /invalid.*response/i);
 });

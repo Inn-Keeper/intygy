@@ -9,13 +9,22 @@ import { resolve, join } from "node:path";
 test("committed Action bundle scans a page and submits the versioned contract", async (t) => {
   const directory = await mkdtemp(join(tmpdir(), "intygy-bundle-"));
   let submitted: any;
+  let workflowToken: unknown;
   const server = createServer(async (req, res) => {
+    // Stands in for the runner's OIDC endpoint, which appends the audience.
+    if (req.url?.startsWith("/oidc")) {
+      res.setHeader("content-type", "application/json");
+      res.end(JSON.stringify({ value: `token-for-${new URL(req.url, "http://x").searchParams.get("audience")}` }));
+      return;
+    }
+
     if (req.url === "/api/ingest") {
       const chunks = [];
 
       for await (const chunk of req) chunks.push(chunk);
 
       submitted = JSON.parse(Buffer.concat(chunks).toString());
+      workflowToken = req.headers["x-intygy-workflow-token"];
       res.setHeader("content-type", "application/json");
       res.end(JSON.stringify({ scanId: "scan", newCount: 0, baselineOpenCount: 1, blocked: false,
         dashboardUrl: "https://example.com/report", baselineUpdated: true }));
@@ -56,7 +65,8 @@ test("committed Action bundle scans a page and submits the versioned contract", 
   const child = spawn(process.execPath, ["--import", bootstrap, resolve("packages/action/dist/index.js")], {
     env: { ...process.env, "INPUT_API-KEY": "test", "INPUT_API-BASE": baseUrl, "INPUT_CONFIG-PATH": config,
       INTYGY_SKIP_BROWSER_INSTALL: "1", GITHUB_REPOSITORY: "acme/shop", GITHUB_SHA: "abc123",
-      GITHUB_REF: "refs/heads/main", GITHUB_EVENT_PATH: event, GITHUB_STEP_SUMMARY: summary },
+      GITHUB_REF: "refs/heads/main", GITHUB_EVENT_PATH: event, GITHUB_STEP_SUMMARY: summary,
+      ACTIONS_ID_TOKEN_REQUEST_URL: `${baseUrl}/oidc?api-version=1`, ACTIONS_ID_TOKEN_REQUEST_TOKEN: "runner" },
     stdio: ["ignore", "pipe", "pipe"],
   });
   let output = "";
@@ -71,6 +81,7 @@ test("committed Action bundle scans a page and submits the versioned contract", 
 
   assert.equal(exitCode, 0, output);
   assert.equal(submitted.version, 2);
+  assert.equal(workflowToken, `token-for-${baseUrl}`);
   assert.match(submitted.submissionId, /^[0-9a-f-]{36}$/);
   assert.deepEqual(submitted.viewports, ["desktop"]);
   assert.equal(submitted.violations.find((v: any) => v.ruleId === "button-name").nodes.length, 1);

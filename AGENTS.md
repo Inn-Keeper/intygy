@@ -50,7 +50,8 @@ authoritative. `packages/shared` is intentionally types-only and has no
   resolution writes commit or roll back together.
 - Post GitHub comments only after the database transaction commits. A GitHub
   failure must not roll back an accepted scan.
-- Treat project API keys and webhook signatures as authentication boundaries.
+- Treat project API keys, GitHub workflow (OIDC) tokens, and webhook signatures as
+  authentication boundaries. Scan context must match the verified workflow token.
   Dashboard and evidence routes remain unauthenticated UUID URLs in the MVP;
   do not describe them as private or suitable for confidential data.
 - Keep customer repositories isolated by project. Never accept repository or

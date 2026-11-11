@@ -37,7 +37,11 @@ async function main(): Promise<void> {
       finishedAt: new Date().toISOString(),
       violations,
     };
-    const result = await submitScan(apiBase, apiKey, payload);
+    // Requested after scanning: the token is short-lived. Its audience is the API URL.
+    const workflowToken = await core.getIDToken(apiBase.replace(/\/$/, "")).catch(() => {
+      throw new Error("Could not get a GitHub OIDC token. Add `permissions: id-token: write` to the Intygy job.");
+    });
+    const result = await submitScan(apiBase, apiKey, workflowToken, payload);
 
     core.summary
       .addHeading("Intygy accessibility check")

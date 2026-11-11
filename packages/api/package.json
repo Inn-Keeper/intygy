@@ -11,6 +11,7 @@
   "dependencies": {
     "@hono/node-server": "^1.13.7",
     "hono": "^4.6.14",
+    "jose": "^6.2.17",
     "octokit": "^4.0.2",
     "pg": "^8.13.1",
     "zod": "^4.4.3"

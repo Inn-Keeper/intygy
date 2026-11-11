@@ -1,5 +1,25 @@
 # Changelog
 
+## Unreleased
+
+### Workflow identity — 2026-11-11
+
+Not yet released or deployed.
+
+### Breaking changes
+
+- Ingestion requires a GitHub Actions OIDC token. Customer workflows must grant
+  `id-token: write`, and the Action's `api-base` must equal the API's
+  `PUBLIC_BASE_URL`. Deploy the API and Action together; older Actions receive a
+  401 that names the missing permission.
+
+### Added
+
+- Verify the workflow token on every scan and reject submissions whose repository,
+  branch, commit, or pull request number differ from the run GitHub attests. A
+  pull-request run holding the project key can no longer submit a default-branch
+  scan and alter the baseline. Adds the `jose` dependency for token verification.
+
 ## 1.0.0 — 2026-11-11
 
 ### Scan lifecycle and architecture fixes

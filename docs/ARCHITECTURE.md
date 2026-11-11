@@ -25,9 +25,13 @@ flowchart LR
 - `lib/evidence.ts` / `lib/report.ts`: stored coverage, findings, and dated lifecycle events.
 - `packages/shared/types.ts`: versioned Action/API contracts; this directory remains types-only.
 
-The project API key authorizes submitted results for exactly one repository. Results
-are customer-produced evidence, not cryptographic proof that a workflow or target
-was trustworthy. The operator's GitHub App needs Metadata read, Contents read (branch
+The project API key authorizes submitted results for exactly one repository. Each
+submission also carries a GitHub Actions OIDC token issued for the API's public URL;
+`lib/oidc.ts` verifies it and rejects scans whose repository, branch, commit, or pull
+request number differ from the attested run. A pull-request run holding the key therefore
+cannot submit a default-branch scan. The pull-request head SHA stays self-reported because
+GitHub signs the merge commit. Results remain customer-produced evidence: the token proves
+which run submitted them, not that the scanned target or its findings were trustworthy. The operator's GitHub App needs Metadata read, Contents read (branch
 head verification), and Pull requests write plus Issues write (PR comments). The customer `GITHUB_TOKEN` needs
 Deployments read when resolving previews. Webhooks require the configured HMAC secret.
 

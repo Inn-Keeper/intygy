@@ -44,7 +44,8 @@ proxy with [smee.io](https://smee.io) — create a channel, then
 Set these environment variables (see `packages/api/.env.example`):
 
 - `DATABASE_URL` — from Step 1
-- `PUBLIC_BASE_URL` — your deployed API URL (or `http://localhost:3000`)
+- `PUBLIC_BASE_URL` — your deployed API URL (or `http://localhost:3000`). It must equal the
+  `api-base` customers pass to the Action, without a trailing slash: workflow tokens are issued for it.
 - `GITHUB_APP_ID`, `GITHUB_APP_PRIVATE_KEY_B64`, `GITHUB_WEBHOOK_SECRET` — from Step 3
 
 ## Step 3 — Register the GitHub App (10 min)
@@ -131,6 +132,11 @@ In the repo you're protecting:
 - **Stale default-branch scan** — the commit is no longer the branch head. Results remain in history without changing the baseline; scan the current head.
 - **No PR comment despite red check** — check API logs; usually the App lacks
   Pull requests write permission or `installation_id` is null (reinstall the App).
+- **Missing or invalid workflow token (401)** — the job needs `permissions: id-token: write`,
+  and the Action's `api-base` must equal the API's `PUBLIC_BASE_URL`. Pull requests from
+  forks cannot obtain a token (or the key) and are not scanned.
+- **Scan does not match the workflow token (403)** — the reported repository, branch,
+  commit, or pull request differs from the run GitHub attests. Check out the triggering commit.
 - **Webhook 401** — `GITHUB_WEBHOOK_SECRET` mismatch between App settings and env.
 - **Playwright install slow in CI** — first run downloads Chromium (~1 min);
   add `actions/cache` on `~/.cache/ms-playwright` keyed to the playwright version.

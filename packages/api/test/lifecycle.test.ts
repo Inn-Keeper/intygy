@@ -103,3 +103,20 @@ test("a comment failure cannot undo a committed scan or hide its report", async 
   assert.equal(result.body.blocked, true);
   assert.equal((await db.query("select count(*)::int as n from scans")).rows[0].n, 2);
 });
+
+test("scans are bound to the workflow run GitHub attests", async (t) => {
+  const { send } = await setup(t);
+
+  assert.equal((await send()).status, 200);
+  assert.equal((await send({}, null)).status, 401);
+  assert.equal((await send({}, { repo: "mallory/shop" })).status, 403);
+  assert.equal((await send({}, { sha: "other" })).status, 403);
+  assert.equal((await send({}, { ref: "refs/heads/feature" })).status, 403);
+  assert.equal((await send({ prNumber: 7 }, { ref: "refs/pull/8/merge" })).status, 403);
+
+  // A pull-request run holding the key cannot pose as a default-branch scan and accept debt.
+  const forged = await send({ violations: [violation(".debt")] }, { ref: "refs/pull/7/merge" });
+
+  assert.equal(forged.status, 403);
+  assert.equal((await send({ prNumber: 7, sha: "pr-head", violations: [violation(".debt")] })).body.blocked, true);
+});

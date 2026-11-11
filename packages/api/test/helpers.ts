@@ -21,17 +21,24 @@ export async function setup(t: import("node:test").TestContext) {
     query,
     transact: (work) => db.transaction((tx) => work(async (sql, params) => (await tx.query(sql, params)).rows as any)),
     verifyRepository: async () => ({ ...state }),
+    // Tests use the identity itself as the token; signature checks belong to jose.
+    verifyWorkflowToken: async (token) => JSON.parse(token),
     postComment: async () => { comments++; if (state.commentFails) throw new Error("GitHub unavailable"); },
     webhookSecret: "test", baseUrl: "https://intygy.test",
   });
   let sequence = 0;
-  const send = async (changes: Record<string, unknown> = {}) => {
+  /** `identity` overrides what the workflow token attests; null omits the token. */
+  const send = async (changes: Record<string, unknown> = {}, identity?: Record<string, unknown> | null) => {
+    const payload: Record<string, any> = { version: 2, submissionId: `run-${++sequence}`, repo: "acme/shop",
+      sha: state.headSha, branch: state.defaultBranch, ruleset: "wcag22-aa",
+      routesScanned: ["/"], viewports: ["desktop"], startedAt: "2026-11-11T10:00:00.000Z",
+      finishedAt: "2026-11-11T10:01:00.000Z", violations: [], ...changes };
+    const token = identity === null ? null : JSON.stringify({ repo: payload.repo, sha: payload.sha,
+      ref: payload.prNumber ? `refs/pull/${payload.prNumber}/merge` : `refs/heads/${payload.branch}`, ...identity });
     const response = await app.request("/api/ingest", {
-      method: "POST", headers: { authorization: "Bearer key", "content-type": "application/json" },
-      body: JSON.stringify({ version: 2, submissionId: `run-${++sequence}`, repo: "acme/shop",
-        sha: state.headSha, branch: state.defaultBranch, ruleset: "wcag22-aa",
-        routesScanned: ["/"], viewports: ["desktop"], startedAt: "2026-11-11T10:00:00.000Z",
-        finishedAt: "2026-11-11T10:01:00.000Z", violations: [], ...changes }),
+      method: "POST",
+      headers: { authorization: "Bearer key", "content-type": "application/json", ...(token ? { "x-intygy-workflow-token": token } : {}) },
+      body: JSON.stringify(payload),
     });
 
     return { status: response.status, body: await response.json() as any };
