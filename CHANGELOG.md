@@ -81,6 +81,12 @@ cannot be recovered. See [installation and rollback instructions](docs/INSTALL.m
   versus direct administrative connection strings and idle-wake behavior. No code,
   schema, or payload changes.
 
+### Fixed (documentation)
+
+- Correct the GitHub App permissions: commenting on pull requests needs
+  **Pull requests: Read & write**. With read-only access the scan was accepted and
+  the check failed, but no PR comment appeared.
+
 ### Verification recorded on 2026-11-11
 
 - `INTYGY_TEST_BROWSER_CHANNEL=chrome pnpm test`: 40 passed, none failed or skipped.

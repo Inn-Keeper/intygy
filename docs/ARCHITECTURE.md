@@ -28,7 +28,7 @@ flowchart LR
 The project API key authorizes submitted results for exactly one repository. Results
 are customer-produced evidence, not cryptographic proof that a workflow or target
 was trustworthy. The operator's GitHub App needs Metadata read, Contents read (branch
-head verification), and Issues write (PR comments). The customer `GITHUB_TOKEN` needs
+head verification), and Pull requests write plus Issues write (PR comments). The customer `GITHUB_TOKEN` needs
 Deployments read when resolving previews. Webhooks require the configured HMAC secret.
 
 ## Scan lifecycle

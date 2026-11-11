@@ -57,7 +57,7 @@ GitHub → Settings → **Developer settings** → **GitHub Apps** → **New Git
 | Homepage URL | your API URL (anything works) |
 | Webhook URL | `https://YOUR_API/api/github/webhook` (or the smee.io channel URL) |
 | Webhook secret | invent one; same value as `GITHUB_WEBHOOK_SECRET` |
-| Permissions | **Issues: Read & write** (PR comments), **Contents: Read-only** (verify branch head), **Pull requests: Read-only**, **Metadata: Read-only** |
+| Permissions | **Pull requests: Read & write** and **Issues: Read & write** (PR comments), **Contents: Read-only** (verify branch head), **Metadata: Read-only** |
 | Subscribe to events | *(none needed beyond the default installation events)* |
 | Where can it be installed | Only on this account (fine for now) |
 
@@ -130,7 +130,7 @@ In the repo you're protecting:
 - **Inactive installation or repository** — restore App access. Re-adding a removed repo rotates its key; retrieve and replace `INTYGY_KEY`.
 - **Stale default-branch scan** — the commit is no longer the branch head. Results remain in history without changing the baseline; scan the current head.
 - **No PR comment despite red check** — check API logs; usually the App lacks
-  Issues write permission or `installation_id` is null (reinstall the App).
+  Pull requests write permission or `installation_id` is null (reinstall the App).
 - **Webhook 401** — `GITHUB_WEBHOOK_SECRET` mismatch between App settings and env.
 - **Playwright install slow in CI** — first run downloads Chromium (~1 min);
   add `actions/cache` on `~/.cache/ms-playwright` keyed to the playwright version.
