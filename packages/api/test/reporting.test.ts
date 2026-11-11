@@ -46,3 +46,11 @@ test("missing projects have no evidence dossier", async (t) => {
 
   assert.equal((await app.request("/p/00000000-0000-4000-8000-000000000099/evidence")).status, 404);
 });
+
+test("malformed project or scan ids are not found rather than server errors", async (t) => {
+  const { app } = await setup(t);
+
+  for (const path of ["/p/not-a-uuid", "/p/not-a-uuid/evidence", `/p/${projectId}/scans/not-a-uuid`]) {
+    assert.equal((await app.request(path)).status, 404, path);
+  }
+});

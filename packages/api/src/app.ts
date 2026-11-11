@@ -11,6 +11,8 @@ import { applyWebhook, WebhookSchema } from "./lib/webhook.js";
 import { renderScan } from "./lib/report.js";
 import { esc, pageShell } from "./lib/html.js";
 
+const UUID = /^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i;
+
 export function createApp(deps: {
   query?: Query;
   transact?: typeof defaultTransaction;
@@ -94,6 +96,15 @@ export function createApp(deps: {
   /* ------------------------------------------------------------------ */
   /* Minimal dashboard + evidence export                                  */
   /* ------------------------------------------------------------------ */
+  // Postgres rejects non-UUID ids with an error; answer 404 before querying.
+  app.use("/p/*", async (c, next) => {
+    const [, , id, , scanId] = c.req.path.split("/");
+
+    if (!UUID.test(id ?? "") || (scanId !== undefined && !UUID.test(scanId))) return c.text("not found", 404);
+
+    await next();
+  });
+
   app.get("/p/:id", async (c) => {
     const id = c.req.param("id");
     const [project] = await q<{ repo: string }>("select repo from projects where id=$1", [id]);

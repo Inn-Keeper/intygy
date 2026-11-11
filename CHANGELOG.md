@@ -87,6 +87,11 @@ cannot be recovered. See [installation and rollback instructions](docs/INSTALL.m
   **Pull requests: Read & write**. With read-only access the scan was accepted and
   the check failed, but no PR comment appeared.
 
+### Fixed
+
+- Return 404 instead of a 500 for dashboard, evidence, and scan report URLs whose
+  project or scan ID is not a UUID.
+
 ### Verification recorded on 2026-11-11
 
 - `INTYGY_TEST_BROWSER_CHANNEL=chrome pnpm test`: 40 passed, none failed or skipped.
