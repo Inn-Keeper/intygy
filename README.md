@@ -13,7 +13,8 @@ packages/api      Hono (Node) API: ingest, baseline diffing, PR comments, dashbo
 packages/shared   Payload types shared by both
 db/schema.sql     Postgres schema
 examples/         Workflow + intygy.yml templates for customer repos
-docs/INSTALL.md      Step-by-step: run this on YOUR GitHub today
+docs/QUICKSTART.md   Customers: scan your repo with the hosted Intygy
+docs/INSTALL.md      Operators: self-host the API and GitHub App
 docs/ARCHITECTURE.md Components, auth, scan lifecycle, testing
 ```
 

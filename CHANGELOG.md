@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased — 2026-11-12
+
+### Added
+
+- `docs/QUICKSTART.md`: customer steps for scanning a repository with the hosted API.
+
+### Changed
+
+- `docs/INSTALL.md` is now titled as the self-hosting guide and links to the quickstart.
+
 ## 1.0.0 — 2026-11-11
 
 ### Workflow identity

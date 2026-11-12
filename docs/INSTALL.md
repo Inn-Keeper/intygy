@@ -1,4 +1,7 @@
-# Installing Intygy on your own GitHub (today, end to end)
+# Self-hosting Intygy: run your own API and GitHub App
+
+Only want to scan a repository with the hosted Intygy? Follow [QUICKSTART.md](./QUICKSTART.md)
+instead. This guide is for operating the whole stack yourself.
 
 Time: ~45 minutes. You'll need: a GitHub account, a Postgres database, and somewhere to run
 a small Node server (Railway, Fly.io, Render, a Hetzner box — or locally with a webhook proxy
