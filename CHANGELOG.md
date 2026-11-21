@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased — 2026-11-21
+
+### Added
+
+- Short PDF introduction with a real pull-request example and a guide to the evidence dossier.
+
+### Changed
+
+- Clarified hosted setup, required checks, self-host credentials, and report access. Separated current product capabilities from proposed pricing and roadmap.
+
 ## Unreleased — 2026-11-12
 
 ### Added

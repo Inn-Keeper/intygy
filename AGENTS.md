@@ -31,7 +31,7 @@ authoritative. `packages/shared` is intentionally types-only and has no
 - Keep changes small, focused and reviewable; avoid unrelated refactors.
 - Prefer existing patterns. Do not add production dependencies without saying why.
 - Write comments that explain what and why. Keep descriptions concise.
-- Leave one blank line before variable/function declarations and between class fields and methods, except at the start of a block. `npm run format` applies this with Prettier and ESLint layout fixes.
+- Leave one blank line before variable/function declarations and between class fields and methods, except at the start of a block.
 - Preserve accessibility (labelled buttons, live status), responsive layout and type safety.
 - Ask when requirements are unclear. For non-trivial features, state the approach and wait for confirmation.
 - Never print, log or commit secrets.

@@ -11,11 +11,11 @@ login, and rotating the secret revokes every link at once.
 ```mermaid
 flowchart LR
   Workflow[Customer workflow] --> Scanner[Playwright + axe-core]
-  Scanner -->|API key + version 2 payload| API[Hono API]
+  Scanner -->|API key + workflow token + v2 payload| API[Hono API]
   API -->|verify repository and current default head| GitHub[GitHub App]
   API -->|one transaction per scan| DB[(Postgres)]
   API -->|after commit| Comment[PR comment]
-  DB --> Reports[Public dashboard, findings and evidence]
+  DB --> Reports[Signed dashboard, findings and evidence]
   GitHub -->|signed installation events| API
 ```
 
@@ -31,10 +31,9 @@ flowchart LR
 
 The project API key authorizes submitted results for exactly one repository. Each
 submission also carries a GitHub Actions OIDC token issued for the API's public URL;
-`lib/oidc.ts` verifies it and rejects scans whose repository, branch, commit, or pull
-request number differ from the attested run. A pull-request run holding the key therefore
-cannot submit a default-branch scan. The pull-request head SHA stays self-reported because
-GitHub signs the merge commit. Results remain customer-produced evidence: the token proves
+`lib/oidc.ts` verifies its signature, issuer, audience and expiry. Push scans must match the signed
+repository, branch and commit. PR scans must match the repository and PR number from the
+signed ref. The PR head branch and SHA are self-reported. Results remain customer-produced evidence: the token proves
 which run submitted them, not that the scanned target or its findings were trustworthy. The operator's GitHub App needs Metadata read, Contents read (branch
 head verification), and Pull requests write plus Issues write (PR comments). The customer `GITHUB_TOKEN` needs
 Deployments read when resolving previews. Webhooks require the configured HMAC secret.
@@ -45,7 +44,7 @@ Deployments read when resolving previews. Webhooks require the configured HMAC s
    timestamps and finding coverage. Legacy clients receive an explicit upgrade error.
 2. Begin a transaction and lock the authenticated project row. Recheck repository
    ownership and active installation/repository authorization under this lock.
-3. If the submission ID already exists, return its stored response unchanged. Reusing
+3. If the submission ID already exists, reuse its stored gate result and issue a fresh signed dashboard link. Reusing
    an ID with different content returns 409. Removed installations cannot replay scans.
 4. Read the actual default branch and its head SHA through the GitHub App while holding
    the project lock. This prevents queued requests from using an earlier head snapshot.
@@ -108,11 +107,11 @@ new key manually. Duplicate provisioning preserves active keys.
 
 | Route | Authentication | Purpose |
 | --- | --- | --- |
-| `POST /api/ingest` | Project Bearer key | Validate, store, compare and return gate result |
+| `POST /api/ingest` | Project bearer key + GitHub workflow token | Validate, store, compare and return gate result |
 | `POST /api/github/webhook` | HMAC signature | Installation and repository lifecycle |
-| `GET /p/:id` | None | Recent scans and baseline count |
-| `GET /p/:id/scans/:scanId` | None | Every finding for that project's scan |
-| `GET /p/:id/evidence` | None | Recorded coverage, partial criteria register and lifecycle events |
+| `GET /p/:id` | Signed project link | Recent scans and baseline count |
+| `GET /p/:id/scans/:scanId` | Signed project link | Every finding for that project's scan |
+| `GET /p/:id/evidence` | Signed project link | Recorded coverage, partial criteria register and lifecycle events |
 | `GET /healthz` | None | Process liveness, not database readiness |
 
 ## Evidence and migration
@@ -153,6 +152,6 @@ deployments, and hosted ingestion still require separate end-to-end acceptance:
 
 1. Install the App, retrieve the project key, and run an initial scan (green).
 2. Add an inaccessible element in a PR (red, complete scan report, best-effort comment).
-3. Fix it and merge; verify the default-branch scan records resolution history.
+3. Fix the PR finding and confirm the check clears. Separately, fix an open baseline finding and verify the matching default-branch scan records its resolution.
 4. Remove a scanned route and confirm its old findings remain open/outside coverage.
 5. Remove the repository from the App and confirm its key no longer ingests results.

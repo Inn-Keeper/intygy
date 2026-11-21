@@ -7,19 +7,6 @@ Time: ~45 minutes. You'll need: a GitHub account, a Postgres database, and somew
 a small Node server (Railway, Fly.io, Render, a Hetzner box — or locally with a webhook proxy
 for testing).
 
-## Step 0 — Release the Action
-
-Customer repos use the Action as `Inn-Keeper/intygy@v1`. After changing `packages/action/src`:
-
-```bash
-pnpm build:action
-git add packages/action/dist && git commit -m "Build action" && git push
-```
-
-CI fails if the committed `dist/` is stale. Then publish a GitHub Release tagged `vX.Y.Z`;
-the release workflow moves the `vX` tag to it. Tick **Publish this Action to the GitHub
-Marketplace** on the release form to list it.
-
 ## Step 1 — Database (5 min)
 
 Create a Postgres instance — a Neon project (choose an EU region near the API host) free
@@ -39,10 +26,8 @@ Deploy `packages/api` to any Node host. Railway/Render: point at the repo,
 start command `pnpm --filter @intygy/api start`, root install command `pnpm install`.
 The start command uses `tsx`, so do not omit development dependencies from this MVP deployment.
 
-**For local testing instead:** copy `packages/api/.env.example` to `packages/api/.env`, fill in
-at least `DATABASE_URL` and `GITHUB_WEBHOOK_SECRET`, then run `pnpm dev:api`. Start a webhook
-proxy with [smee.io](https://smee.io) — create a channel, then
-`npx smee-client --url https://smee.io/YOUR_CHANNEL --target http://localhost:3000/api/github/webhook`.
+For local testing, copy `packages/api/.env.example` to `packages/api/.env`. For a hosted
+deployment, use the host’s secret settings. Configure the following before starting the API.
 
 Set these environment variables (see `packages/api/.env.example`):
 
@@ -69,7 +54,9 @@ GitHub → Settings → **Developer settings** → **GitHub Apps** → **New Git
 
 After creating: note the **App ID**, then **Generate a private key** (downloads a `.pem`).
 Convert it for the env var: `base64 -w0 your-key.pem` → `GITHUB_APP_PRIVATE_KEY_B64`.
-Restart/redeploy the API with all env vars set.
+With all variables set, start the API. Locally, run `pnpm dev:api` and forward GitHub
+webhooks with `npx smee-client --url https://smee.io/YOUR_CHANNEL --target http://localhost:3000/api/github/webhook`.
+GitHub-hosted runners also need a reachable API URL for ingest. A webhook proxy alone only forwards events.
 
 Check that the process is serving requests:
 
@@ -89,43 +76,63 @@ curl -i -X POST http://localhost:3000/api/ingest \
 
 ## Step 4 — Install the App on a target repo (2 min)
 
-On the App's page click **Install App**, pick the repository you want to protect
-(your React flashcard app is a perfect guinea pig). The installation webhook fires and the
-API creates a project row. Get its API key:
+Install your GitHub App on the target repository. Its installation webhook provisions
+the project. In your database client, replace `owner/repo` with its full name:
 
 ```sql
-select repo, api_key, id from projects;
+SELECT p.api_key
+FROM projects p
+JOIN installations i ON i.id = p.installation_id
+WHERE p.repo = 'owner/repo' AND p.active AND i.active;
 ```
 
-(Neon SQL Editor. Yes, manual for now — the onboarding UI is the first post-MVP task.)
+Give the key to the administrator of that repository for the `INTYGY_KEY` Actions secret.
 
-## Step 5 — Wire up the target repo (5 min)
+## Step 5 — Connect and verify the repository
 
-In the repo you're protecting:
+Follow the [quickstart from step 3](./QUICKSTART.md#3-add-the-key-as-a-secret).
+Override the example workflow’s `api-base` with your API’s `PUBLIC_BASE_URL`.
+To verify resolution history, fix an existing open baseline finding and confirm a
+current default-branch scan covers the same route, viewport, and ruleset.
 
-1. Settings → Secrets → Actions → new secret `INTYGY_KEY` = the api_key from Step 4.
-2. Copy `examples/intygy-workflow.yml` → `.github/workflows/intygy.yml`. Its `api-base`
-   points at the hosted API, `https://intygy-api.onrender.com`; replace it if you run your
-   own, and keep it equal to that API's `PUBLIC_BASE_URL`. The workflow runs on **pull requests**
-   (gate new violations) and **pushes to `main`** (update baseline, mark resolved issues).
-3. Copy `examples/intygy.yml` → repo root; set real routes. No Vercel/Netlify previews?
-   Use the `serve:` variant and add your app's dependency-install/build prerequisites to the workflow.
-4. Set `readySelector` to an element visible only when the app is ready on each route.
-   Authenticated scans also require `auth.success_selector` after login and on each route.
-5. Replace the workflow's `main` filter with your actual default branch. The API discovers
-   it independently through the GitHub App; the workflow still controls when jobs run.
+## Authenticated routes
 
-## Step 6 — See it work (5 min)
+Create repository Actions secrets `INTYGY_TEST_USER` and `INTYGY_TEST_PASS` for a
+dedicated test account. Keep routes, target and readiness settings in the root
+`intygy.yml`. The Action reads that file literally. To supply credentials at run time,
+insert this step immediately before the Intygy step in the example Ubuntu workflow:
 
-1. Open any PR → the check runs → **baseline established**, check is green,
-   dashboard link in the job summary shows your existing issue count.
-2. Now break something on purpose in a new PR — e.g. add a visible button with no text or accessible name.
-   Removing a focus outline alone is not a reliable axe regression test.
-3. The check goes **red**, and the Intygy bot comments on the PR with the rule,
-   the WCAG criterion, the selector, and a fix link.
-4. Fix it, push, check goes green. Merge to `main` → the **push** workflow runs and records
-   resolved issues within the scanned coverage. Open the dashboard link from the run summary, then **Evidence history** — the dossier should show updated
-   resolution counts.
+```yaml
+- name: Prepare authenticated scan config
+  env:
+    TEST_USER: ${{ secrets.INTYGY_TEST_USER }}
+    TEST_PASS: ${{ secrets.INTYGY_TEST_PASS }}
+  run: |
+    python3 - <<'PYTHON'
+    import json
+    import os
+    from pathlib import Path
+
+    auth = {
+        "login_url": "/login",
+        "user": os.environ["TEST_USER"],
+        "pass": os.environ["TEST_PASS"],
+        "success_selector": "[data-testid=sign-out]",
+    }
+    path = Path(os.environ["RUNNER_TEMP"]) / "intygy.yml"
+    with open(path, "x", opener=lambda name, flags: os.open(name, flags, 0o600)) as config:
+        config.write(Path("intygy.yml").read_text() + "\nauth: " + json.dumps(auth) + "\n")
+    PYTHON
+```
+
+Use a base config without an existing `auth` entry. Adapt the login path and choose
+a success selector visible after login and on every scanned route. If your form uses
+custom controls, set `user_field`, `pass_field`, and `submit` selectors in `auth`.
+Add this input alongside `api-key` and `api-base` in the Intygy step’s `with` block:
+
+```yaml
+config-path: ${{ runner.temp }}/intygy.yml
+```
 
 ## Troubleshooting
 
@@ -185,3 +192,16 @@ the repository's test/build commands.
 
 For SQL tests against a disposable Postgres instance, set `INTYGY_TEST_DATABASE_URL` and
 run `pnpm test`. See `ARCHITECTURE.md` for embedded versus multi-connection test scope.
+
+## Maintainers: release the Action
+
+Customer repos use the Action as `Inn-Keeper/intygy@v1`. After changing `packages/action/src`:
+
+```bash
+pnpm build:action
+git add packages/action/dist && git commit -m "Build action" && git push
+```
+
+CI fails if the committed `dist/` is stale. Then publish a GitHub Release tagged `vX.Y.Z`;
+the release workflow moves the `vX` tag to it. Tick **Publish this Action to the GitHub
+Marketplace** on the release form to list it.

@@ -1,10 +1,10 @@
 # Quickstart: try Intygy on your repository
 
-Time: about 15 minutes. You need admin access to a GitHub repository with a web app that
+Allow about 15 minutes of hands-on setup after you receive your project API key. You need admin access to a GitHub repository with a web app that
 either has Vercel/Netlify preview deployments or can be built and served inside GitHub Actions.
 
-Intygy scans the routes you list with axe-core on every pull request, blocks only **new**
-WCAG 2.2 violations, and keeps a dated history of findings and fixes.
+Intygy scans the routes you list with axe-core on same-repository pull requests, fails the check for **new**
+automated WCAG findings, and keeps a dated history of findings and fixes.
 
 ## Before you start
 
@@ -46,20 +46,41 @@ Copy [`examples/intygy.yml`](../examples/intygy.yml) to the repository root. The
 - Set `routes` to real paths in your app.
 - Set `readySelector` to an element that is visible only once a page has finished loading,
   not a loading shell.
-- No Vercel/Netlify previews? Switch `target` to the `serve:` variant and add your app's
-  install and build steps to the workflow before the Intygy step.
-- Scanning pages behind a login also needs `auth.success_selector`, an element visible
-  after login and on every scanned route.
+- Keep `target: preview` if GitHub records a successful deployment with a reachable URL
+  for **both** the PR head commit and the default-branch commit after merge.
+- Otherwise use the example’s `serve` target. Install your app’s dependencies before the
+  Intygy step, set the local URL and port, and build only once. The example’s serve
+  command already builds the app before starting it.
+- Start with a public route if available. For routes behind a login, see
+  [Authenticated routes](./INSTALL.md#authenticated-routes).
 
-## 6. Open a pull request
+## 6. Establish the baseline
 
-1. The first scan records your existing issues as the baseline. The check is green, and
-   the job summary links to your dashboard.
-2. To see a block, open a pull request that adds a visible button with no text or
-   accessible name. The check goes red and the Intygy bot comments with the rule, the WCAG
-   criterion, the selector, and a fix link.
-3. Fix it and push; the check goes green. Merging to your default branch updates the
-   baseline and records resolved issues.
+Open a setup PR from a branch in the same repository containing the workflow and config.
+Keep the app unchanged for this first scan. Wait for **Accessibility check** to finish,
+then open **Dashboard** from the Actions run summary. The first successful scan records
+existing findings as the baseline and passes even when that count is above zero.
+
+Merge the setup PR. In **Actions**, confirm the push run for the default branch also
+succeeds. Use the dashboard link from the latest successful run whenever you need a
+fresh signed link.
+
+## 7. Require the check and verify it blocks a merge
+
+Ordinary fork PRs cannot access the project secret. Requiring this check can leave those PRs blocked.
+
+1. In repository **Settings → Rules → Rulesets**, edit or create an active branch
+   ruleset targeting the default branch. Enable **Require status checks to pass**,
+   select the check reported by the setup run (`a11y` in the example), and save.
+   An existing branch protection rule can require the same check.
+2. Open a second same-repository PR. On a scanned route, add a visible button with
+   no text or accessible name. Confirm the check fails, the Intygy comment identifies
+   the element, and GitHub lists the failed required check as blocking the merge.
+3. Give the button an accessible name and push again. Confirm the check passes, then
+   merge. Open the default-branch push run and follow **Dashboard → Export evidence dossier**.
+   This run updates the baseline for the coverage it scanned. A resolution appears
+   when a previously open baseline finding disappears within that coverage. The
+   button fixed before merge never entered the baseline.
 
 The first scan after a quiet period can take longer while the hosted API wakes up. If it
 times out, re-run the job.
