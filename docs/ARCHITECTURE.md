@@ -1,12 +1,6 @@
-# Intygy — Architecture
+# Intygy architecture
 
-Intygy scans inside customer GitHub Actions and stores results in an operator-hosted
-Hono/Postgres API. The installed GitHub App verifies repository metadata and posts
-PR comments. Dashboard, scan-report, and evidence pages open only through links signed with
-`LINK_SIGNING_SECRET` (HMAC over project ID and expiry, valid 30 days). One signature covers
-all pages of a project, and each ingest response and PR comment carries a fresh link. These
-are bearer links: anyone holding an unexpired link can read the project, there is no user
-login, and rotating the secret revokes every link at once.
+Intygy scans your web app inside GitHub Actions. Its hosted API tracks existing accessibility findings and tells the workflow when a pull request introduces a new one.
 
 ```mermaid
 flowchart LR
@@ -15,65 +9,47 @@ flowchart LR
   API -->|verify repository and current default head| GitHub[GitHub App]
   API -->|one transaction per scan| DB[(Postgres)]
   API -->|after commit| Comment[PR comment]
-  DB --> Reports[Signed dashboard, findings and evidence]
+  API --> Reports[Signed dashboard, findings and evidence]
   GitHub -->|signed installation events| API
 ```
 
-## Components and trust boundaries
+| Component | What it does |
+| --- | --- |
+| Customer workflow | Runs the Intygy Action in the customer’s repository and reports the check result on GitHub. |
+| Playwright + axe-core | Playwright opens each configured page at each viewport, and axe-core checks the rendered content for accessibility violations. |
+| Hono API | Verifies the submission, compares findings with the repository’s baseline, and returns the result to the Action. |
+| GitHub App | Supplies repository and branch metadata, sends installation events, and gives Intygy permission to comment on PRs. |
+| Postgres | Stores projects, scans, individual findings, baselines, and their history. |
+| PR comment | Shows new findings and links to the dashboard after the API saves the scan. |
+| Signed dashboard, findings and evidence | Let a link holder review scans, inspect affected elements, and export recorded evidence. |
 
-- `packages/action`: resolve the target, confirm readiness/authentication, scan all
-  configured route/viewport combinations, submit results, and fail on new PR findings.
-- `packages/api/src/app.ts`: testable Hono routes; `index.ts` starts the Node server.
-- `lib/ingest.ts`: authenticated repository isolation, locking, retry replay, and baseline lifecycle.
-- `lib/webhook.ts`: installation provisioning, suspension/removal, and key rotation on reauthorization.
-- `lib/evidence.ts` / `lib/report.ts`: stored coverage, findings, and dated lifecycle events.
-- `packages/shared/types.ts`: versioned Action/API contracts; this directory remains types-only.
+## Who can submit and read scans?
 
-The project API key authorizes submitted results for exactly one repository. Each
-submission also carries a GitHub Actions OIDC token issued for the API's public URL;
-`lib/oidc.ts` verifies its signature, issuer, audience and expiry. Push scans must match the signed
-repository, branch and commit. PR scans must match the repository and PR number from the
-signed ref. The PR head branch and SHA are self-reported. Results remain customer-produced evidence: the token proves
-which run submitted them, not that the scanned target or its findings were trustworthy. The operator's GitHub App needs Metadata read, Contents read (branch
-head verification), and Pull requests write plus Issues write (PR comments). The customer `GITHUB_TOKEN` needs
-Deployments read when resolving previews. Webhooks require the configured HMAC secret.
+- **Submissions.** A project API key identifies one repository. The API also verifies the GitHub Actions OIDC token’s signature, issuer, audience (the API URL), and expiry. Pushes must match the signed repository, branch, and commit. PRs must match the signed repository and PR number. The Action supplies the PR head branch and SHA. The workflow identity is verified, while the scanned content and findings come from the customer’s runner.
+- **GitHub access.** The operator’s App needs Metadata and Contents read access to verify repository state, plus Pull requests and Issues write access for comments. The customer workflow uses Deployments read access to find previews. Installation webhooks require an HMAC signature.
+- **Report access.** Anyone holding an unexpired signed link can read all report pages for that project without a login. The API signs the project ID and expiry with `LINK_SIGNING_SECRET`. Ingest responses and PR comments carry fresh links valid for 30 days. Rotating the secret revokes all existing links.
 
-## Scan lifecycle
+## How a scan changes the baseline
 
-1. Validate the version 2 payload, including its submission ID, routes, viewports,
-   timestamps and finding coverage. Legacy clients receive an explicit upgrade error.
-2. Begin a transaction and lock the authenticated project row. Recheck repository
-   ownership and active installation/repository authorization under this lock.
-3. If the submission ID already exists, reuse its stored gate result and issue a fresh signed dashboard link. Reusing
-   an ID with different content returns 409. Removed installations cannot replay scans.
-4. Read the actual default branch and its head SHA through the GitHub App while holding
-   the project lock. This prevents queued requests from using an earlier head snapshot.
-   GitHub verification failures roll back ingestion. Verification requests have timeouts.
-5. Split axe rule groups into one finding per element. The `v2:` fingerprint includes
-   rule, route, viewport, and the exact selector. Sibling positions are significant;
-   selector changes may produce new findings. Node order within an axe result does not.
-6. The first successful scan establishes the baseline without blocking, including a PR
-   scan. A stale default-branch scan cannot initialize a project. After initialization,
-   only a non-PR scan whose branch and SHA match the verified default-branch head may
-   update baseline state. Other branch scans and stale default scans remain in history
-   with an explicit notice and do not accept or resolve debt.
-7. PRs compare against open baseline fingerprints. New elements block; known debt does not.
-8. Default-branch updates absorb observed findings. Missing findings resolve only when
-   their route, viewport and ruleset are all covered by this successful scan. Removing a
-   route/viewport or changing rulesets does not manufacture fixes. Unmapped legacy rows
-   remain unchanged and visibly outside verified coverage.
-9. Persist the scan, findings, baseline updates, lifecycle events, and exact response in
-   one transaction. A database error rolls everything back. Per-project row locks also
-   serialize concurrent first scans. Scan receipt timestamps are taken after acquiring
-   the lock, rather than using a waiting transaction's start time.
-10. After commit, attempt a PR comment once. Failure cannot roll back the scan; all
-    findings remain available in the linked scan report. Replays do not duplicate comments.
-    Comment delivery is best-effort; there is no background retry queue in this MVP.
+The baseline is the set of open findings already recorded for a repository. The API tracks each failing element by its rule, route, viewport, and exact selector (`v2:` fingerprint). Changing a selector or sibling position can produce a new finding. Reordering axe’s results preserves the fingerprints.
 
-The Action generates a UUID once per invocation, preserving it and the exact payload
-across up to three transport attempts. Separate steps, matrix jobs, and workflow reruns
-are distinct scans. Client requests have a 30-second timeout. A fresh invocation is not
-an idempotent retry of an older invocation.
+| Scan | Result |
+| --- | --- |
+| First successful scan | Records existing findings and passes, including on a PR. A stale default-branch scan cannot establish the baseline. |
+| Subsequent PR | Fails the check if it finds any fingerprint outside the open baseline. |
+| Current default-branch head | Adds observed findings and resolves missing ones only within the route, viewport, and ruleset scanned. Unmapped legacy findings stay open. |
+| Other branch or stale default-branch head after setup | Records the scan in history and leaves the baseline intact. |
+
+### Storage and retries
+
+1. The API validates the v2 payload, submission ID, timestamps, and coverage. Older clients receive an upgrade error.
+2. It locks the project row, records receipt time, and rechecks repository ownership and installation access. The lock serializes concurrent scans, including the first baseline. It checks the current default branch and head through GitHub under the same lock for each new submission.
+3. It saves the scan, findings, baseline changes, lifecycle events, and response in one transaction. A database error or failed GitHub verification rolls back the transaction.
+4. After commit, the API attempts the PR comment once. The report remains available if posting fails.
+
+The Action uses one submission ID and payload across up to three transport attempts, with a 30-second timeout per request. An authorized replay returns the stored gate result and a fresh dashboard link without duplicating the comment. Reusing the ID with different content returns HTTP 409. A workflow rerun, separate step, or matrix job gets a new ID.
+
+The scanner lives in `packages/action`. The API routes start in `packages/api/src/app.ts`, with baseline handling in `lib/ingest.ts` and token verification in `lib/oidc.ts` under the same directory. The Action and API share payload types in `packages/shared/types.ts`.
 
 ## Coverage and scanner behavior
 

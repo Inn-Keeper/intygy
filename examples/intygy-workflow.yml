@@ -18,7 +18,7 @@ jobs:
         with:
           # Local serve builds must match the SHA recorded by the Action.
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
-      # For a local serve target, install your application's dependencies here.
+      # For a local serve target, install dependencies and build your app here (see docs/QUICKSTART.md).
       - uses: Inn-Keeper/intygy@v1
         with:
           api-key: ${{ secrets.INTYGY_KEY }}
