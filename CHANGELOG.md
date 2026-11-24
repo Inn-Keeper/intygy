@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased — 2026-11-24
+
+### Fixed
+
+- Render a standalone **View scan report** link in the GitHub Actions summary.
+
 ## Unreleased — 2026-11-21
 
 ### Added

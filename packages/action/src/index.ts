@@ -44,10 +44,10 @@ async function main(): Promise<void> {
     const result = await submitScan(apiBase, apiKey, workflowToken, payload);
 
     core.summary
-      .addHeading("Intygy accessibility check")
       .addRaw(
-        `New violations: **${result.newCount}** · Baseline (tracked, non-blocking): **${result.baselineOpenCount}** · ` +
-          `[Dashboard](${result.dashboardUrl})`
+        `## Intygy accessibility check\n\n` +
+          `New violations: **${result.newCount}** · Baseline (tracked, non-blocking): **${result.baselineOpenCount}**\n\n` +
+          `[View scan report](<${result.dashboardUrl}>)\n`
       );
     await core.summary.write();
 

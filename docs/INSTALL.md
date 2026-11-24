@@ -60,7 +60,7 @@ WHERE p.repo = 'owner/repo' AND p.active AND i.active;
 
 Give the key to the repo administrator to save as the Actions secret `INTYGY_KEY`.
 Follow the [Quickstart’s first scan](./QUICKSTART.md#2-try-one-deployed-page), using
-your exact `PUBLIC_BASE_URL` for the workflow’s `api-base`. Open **Dashboard** from
+your exact `PUBLIC_BASE_URL` for the workflow’s `api-base`. Open **View scan report** from
 the successful run summary to see the result.
 
 For login-protected routes, troubleshooting, database upgrades, and Action releases,

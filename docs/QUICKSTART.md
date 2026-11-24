@@ -62,7 +62,7 @@ jobs:
 ```
 
 Save the file to your default branch, merging a PR if your repo requires one.
-Open **Actions → Try Intygy → the latest run → Summary → Dashboard**. The first
+Open **Actions → Try Intygy → the latest run → Summary → View scan report**. The first
 successful scan passes and records any findings. You can stop here after viewing
 your report. The trial runs again only when that workflow file changes on the
 default branch.
@@ -115,9 +115,9 @@ Match `url` to the port your start command actually uses.
 
 1. Open a PR from a branch in the same repo containing just the setup files.
 2. Open **Actions → Accessibility check** for the PR. When it passes, open
-   **Dashboard** from the run summary to see what Intygy recorded. If you already ran the trial, this PR compares against the existing baseline.
+   **View scan report** from the run summary to see what Intygy recorded. If you already ran the trial, this PR compares against the existing baseline.
 3. Merge the setup PR and confirm the default-branch push run also succeeds.
-   Setup is complete. Use the latest successful run summary for a fresh dashboard link.
+   Setup is complete. Use the latest successful run summary for a fresh report link.
 
 To expand coverage, add routes that share the readiness selector. For pages
 that require login, follow [Authenticated routes](./OPERATIONS.md#authenticated-routes).
@@ -135,7 +135,7 @@ secret and fail before scanning. Requiring the check can block those contributio
    no text or accessible name. Confirm the check fails, the Intygy comment identifies
    the element, and GitHub lists the failed required check as blocking the merge.
 3. Give the button an accessible name and push again. Confirm the check passes, then
-   merge. Open the default-branch push run and follow **Dashboard → Export evidence dossier**.
+   merge. Open the default-branch push run, select **View scan report**, and follow the dashboard link to **Export evidence dossier**.
    This run updates the baseline for the coverage it scanned. A resolution appears
    when a previously open baseline finding disappears within that coverage. The
    button fixed before merge never entered the baseline.
